@@ -33,7 +33,7 @@ type Edge struct {
 
 type MapData struct {
 	Vertices []Vertex
-	Edges []Edge
+	Edges    []Edge
 }
 
 // Read header to verify the file is valid
@@ -72,7 +72,7 @@ func loadQ2BSP(r io.ReaderAt) (*MapData, error) {
 	// Combine into map data
 	mapData := &MapData{
 		Vertices: vertices,
-		Edges: edges,
+		Edges:    edges,
 	}
 
 	return mapData, nil
