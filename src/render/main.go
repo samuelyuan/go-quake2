@@ -20,13 +20,13 @@ const (
 
 var (
 	position = mgl32.Vec3{0, 0, 3}.Normalize()
-	forward  = mgl32.Vec3{0, 0, -1}.Normalize()
-	up       = mgl32.Vec3{0, 1, 3}.Normalize()
-	right    = forward.Cross(up).Normalize()
+	cameraFront  = mgl32.Vec3{0, 0, -1}.Normalize()
+	cameraUp       = mgl32.Vec3{0, 1, 3}.Normalize()
+	right    = cameraFront.Cross(cameraUp).Normalize()
 
 	// Used for movement
-	deltaTime float64
-	lastFrame float64
+	deltaTime = 0.0
+	lastFrame = 0.0
 
 	// Eular angles (in degrees)
 	yaw   = -90.0
@@ -76,10 +76,10 @@ func mouseCallback(w *glfw.Window, xPos float64, yPos float64) {
 	y := float32(math.Sin(mgl64.DegToRad(pitch)))
 	z := float32(math.Sin(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
 	front := mgl32.Vec3{x, y, z}
-	forward = front.Normalize()
 
 	// recalculate vectors
-	right = front.Cross(up).Normalize()
+	cameraFront = front.Normalize()
+	right = cameraFront.Cross(cameraUp).Normalize()
 }
 
 func keyCallback(window *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
@@ -95,14 +95,14 @@ func keyCallback(window *glfw.Window, key glfw.Key, scancode int, action glfw.Ac
 		deltaTime = currentFrame - lastFrame
 		lastFrame = currentFrame
 
-		velocity := float32(0.05 * deltaTime)
+		velocity := float32(0.5 * deltaTime)
 		if key == glfw.KeyW {
 			// forward
-			position = position.Add(forward.Mul(velocity))
+			position = position.Add(cameraFront.Mul(velocity))
 		}
 		if key == glfw.KeyS {
 			// backward
-			position = position.Sub(forward.Mul(velocity))
+			position = position.Sub(cameraFront.Mul(velocity))
 		}
 		if key == glfw.KeyA {
 			// left
@@ -117,11 +117,11 @@ func keyCallback(window *glfw.Window, key glfw.Key, scancode int, action glfw.Ac
 
 func GetViewMatrix() mgl32.Mat4 {
 	eye := position
-	center := position.Add(forward)
+	center := position.Add(cameraFront)
 	return mgl32.LookAt(
 		eye.X(), eye.Y(), eye.Z(),
 		center.X(), center.Y(), center.Z(),
-		up.X(), up.Y(), up.Z())
+		cameraUp.X(), cameraUp.Y(), cameraUp.Z())
 }
 
 func initGLFW() *glfw.Window {
@@ -202,8 +202,8 @@ func createVertexData(mapData *MapData) []float32 {
 		v2Data := mapData.Vertices[v2Idx]
 
 		// scale down to make the map fit the screen
-		vertexData = append(vertexData, v1Data.X/500.0, v1Data.Y/500.0, v1Data.Z/500.0)
-		vertexData = append(vertexData, v2Data.X/500.0, v2Data.Y/500.0, v2Data.Z/500.0)
+		vertexData = append(vertexData, v1Data.X/300.0, v1Data.Y/300.0, v1Data.Z/300.0)
+		vertexData = append(vertexData, v2Data.X/300.0, v2Data.Y/300.0, v2Data.Z/300.0)
 	}
 
 	return vertexData
@@ -242,10 +242,14 @@ func main() {
 
 		// Create transformations
 		view := GetViewMatrix()
+		ratio := float64(windowWidth) / float64(windowHeight)
+		projection := mgl32.Perspective(45.0, float32(ratio), 0.1, 100.0)
 		// Get their uniform location
 		viewLoc := gl.GetUniformLocation(programShader, gl.Str("view\x00"))
+		projectionLoc := gl.GetUniformLocation(programShader, gl.Str("projection\x00"))
 		// Pass the matrices to the shader
 		gl.UniformMatrix4fv(viewLoc, 1, false, &view[0])
+		gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
 
 		// Render map data to the screen
 		gl.BindVertexArray(vertexArrayObj)
