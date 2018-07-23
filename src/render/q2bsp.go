@@ -31,9 +31,28 @@ type Edge struct {
 	V2 uint16
 }
 
+type Face struct {
+	Plane     uint16 // index of the plane the face is parallel to
+	PlaneSide uint16 // set if the normal is parallel to the plane normal
+
+	FirstEdge uint32 // index of the first edge (in the face edge array)
+	NumEdges  uint16 // number of consecutive edges (in the face edge array)
+
+	TextureInfo uint16 // index of the texture info structure
+
+	LightmapSyles  [4]uint8 // styles (bit flags) for the lightmaps
+	LightmapOffset uint32   // offset of the lightmap (in bytes) in the lightmap lump
+}
+
+type FaceEdge struct {
+	EdgeIndex int32
+}
+
 type MapData struct {
-	Vertices []Vertex
-	Edges    []Edge
+	Vertices  []Vertex
+	Edges     []Edge
+	Faces     []Face
+	FaceEdges []FaceEdge
 }
 
 // Read header to verify the file is valid
@@ -66,13 +85,23 @@ func loadQ2BSP(r io.ReaderAt) (*MapData, error) {
 	}
 	edges, err := loadEdges(header.Lumps[11], r)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load Edges")
+		return nil, fmt.Errorf("Failed to load edges")
+	}
+	faces, err := loadFaces(header.Lumps[6], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load faces")
+	}
+	faceEdges, err := loadFaceEdges(header.Lumps[12], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load face edges")
 	}
 
 	// Combine into map data
 	mapData := &MapData{
-		Vertices: vertices,
-		Edges:    edges,
+		Vertices:  vertices,
+		Edges:     edges,
+		Faces:     faces,
+		FaceEdges: faceEdges,
 	}
 
 	return mapData, nil
@@ -125,4 +154,49 @@ func loadEdges(lump Lump, r io.ReaderAt) ([]Edge, error) {
 	}
 
 	return edgeData, nil
+}
+
+func loadFaces(lump Lump, r io.ReaderAt) ([]Face, error) {
+	// A face is 20 bytes
+	numFaces := int(lump.Length / 20)
+
+	fmt.Println("Face count:", numFaces)
+
+	var faceData []Face
+
+	// Read each face
+	faceReader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < numFaces; i++ {
+		face := Face{}
+		if err := binary.Read(faceReader, binary.LittleEndian, &face); err != nil {
+			return nil, err
+		}
+		// Add to array
+		faceData = append(faceData, face)
+	}
+
+	return faceData, nil
+}
+
+func loadFaceEdges(lump Lump, r io.ReaderAt) ([]FaceEdge, error) {
+	// A face edge is 4 bytes
+	numFaceEdges := int(lump.Length / 4)
+
+	fmt.Println("Face edge count:", numFaceEdges)
+
+	var faceEdgeData []FaceEdge
+
+	// Read each face
+	faceEdgeReader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < numFaceEdges; i++ {
+		faceEdge := FaceEdge{}
+		if err := binary.Read(faceEdgeReader, binary.LittleEndian, &faceEdge); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		faceEdgeData = append(faceEdgeData, faceEdge)
+	}
+
+	return faceEdgeData, nil
 }

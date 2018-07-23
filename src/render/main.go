@@ -19,10 +19,10 @@ const (
 )
 
 var (
-	position = mgl32.Vec3{0, 0, 3}.Normalize()
-	cameraFront  = mgl32.Vec3{0, 0, -1}.Normalize()
-	cameraUp       = mgl32.Vec3{0, 1, 3}.Normalize()
-	right    = cameraFront.Cross(cameraUp).Normalize()
+	position    = mgl32.Vec3{0, 0, 3}.Normalize()
+	cameraFront = mgl32.Vec3{0, 0, -1}.Normalize()
+	cameraUp    = mgl32.Vec3{0, 1, 3}.Normalize()
+	right       = cameraFront.Cross(cameraUp).Normalize()
 
 	// Used for movement
 	deltaTime = 0.0
@@ -202,8 +202,49 @@ func createVertexData(mapData *MapData) []float32 {
 		v2Data := mapData.Vertices[v2Idx]
 
 		// scale down to make the map fit the screen
-		vertexData = append(vertexData, v1Data.X/300.0, v1Data.Y/300.0, v1Data.Z/300.0)
-		vertexData = append(vertexData, v2Data.X/300.0, v2Data.Y/300.0, v2Data.Z/300.0)
+		vertexData = append(vertexData, v1Data.X/500.0, v1Data.Y/500.0, v1Data.Z/500.0)
+		vertexData = append(vertexData, v2Data.X/500.0, v2Data.Y/500.0, v2Data.Z/500.0)
+	}
+
+	return vertexData
+}
+
+func getVertex(mapData *MapData, faceEdgeIdx int) Vertex {
+	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
+
+	// Edge index is positive
+	if edgeIdx >= 0 {
+		// Return first vertex as the start of the edge
+		return mapData.Vertices[mapData.Edges[edgeIdx].V1]
+	}
+
+	// Edge index is negative
+	// Return second vertex as the start of the edge
+	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
+}
+
+func createTriangleData(mapData *MapData) []float32 {
+	var vertexData []float32
+
+	var offset uint16
+	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
+		face := mapData.Faces[faceIdx]
+
+		v0 := getVertex(mapData, int(face.FirstEdge))
+		v1 := getVertex(mapData, int(face.FirstEdge)+1)
+
+		// Generate triangle fan from polyglon
+		for offset = 2; offset < face.NumEdges; offset++ {
+			v2 := getVertex(mapData, int(face.FirstEdge)+int(offset))
+
+			// scale down to make the map fit the screen
+			// Add triangle
+			vertexData = append(vertexData, v0.X/500.0, v0.Y/500.0, v0.Z/500.0)
+			vertexData = append(vertexData, v1.X/500.0, v1.Y/500.0, v1.Z/500.0)
+			vertexData = append(vertexData, v2.X/500.0, v2.Y/500.0, v2.Z/500.0)
+
+			v1 = v2
+		}
 	}
 
 	return vertexData
@@ -229,10 +270,13 @@ func main() {
 	window := initGLFW()
 	programShader := initOpenGL()
 
-	//gl.ClearColor(0, 0.5, 1.0, 1.0)
+	gl.ClearColor(0, 0.5, 1.0, 1.0)
 
-	vertexData := createVertexData(mapData)
-	vertexArrayObj := makeVertexArrayObj(vertexData)
+	//edgeData := createVertexData(mapData)
+	//edgeVAO := makeVertexArrayObj(edgeData)
+
+	triangleData := createTriangleData(mapData)
+	triangleVAO := makeVertexArrayObj(triangleData)
 
 	for !window.ShouldClose() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -252,8 +296,11 @@ func main() {
 		gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
 
 		// Render map data to the screen
-		gl.BindVertexArray(vertexArrayObj)
-		gl.DrawArrays(gl.LINES, 0, int32(len(vertexData))/2)
+		gl.BindVertexArray(triangleVAO)
+		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(triangleData))/3)
+
+		//gl.BindVertexArray(edgeVAO)
+		//gl.DrawArrays(gl.LINES, 0, int32(len(edgeData))/2)
 
 		glfw.PollEvents()
 		window.SwapBuffers()
