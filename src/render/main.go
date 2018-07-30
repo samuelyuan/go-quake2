@@ -15,7 +15,7 @@ import (
 const (
 	windowWidth      = 800
 	windowHeight     = 600
-	MouseSensitivity = 0.05
+	MouseSensitivity = 0.1
 )
 
 var (
@@ -272,13 +272,14 @@ func main() {
 
 	gl.ClearColor(0, 0.5, 1.0, 1.0)
 
-	//edgeData := createVertexData(mapData)
-	//edgeVAO := makeVertexArrayObj(edgeData)
+	edgeData := createVertexData(mapData)
+	edgeVAO := makeVertexArrayObj(edgeData)
 
 	triangleData := createTriangleData(mapData)
 	triangleVAO := makeVertexArrayObj(triangleData)
 
 	for !window.ShouldClose() {
+		gl.Enable(gl.DEPTH_TEST)
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		// Activate shader
@@ -295,12 +296,19 @@ func main() {
 		gl.UniformMatrix4fv(viewLoc, 1, false, &view[0])
 		gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
 
+		color_location := gl.GetUniformLocation(programShader, gl.Str("color\x00"));
+		color := [3]float32{0.5, 0.5, 0.5};
+		gl.Uniform3fv(color_location, 1, &color[0]);
+
 		// Render map data to the screen
 		gl.BindVertexArray(triangleVAO)
 		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(triangleData))/3)
 
-		//gl.BindVertexArray(edgeVAO)
-		//gl.DrawArrays(gl.LINES, 0, int32(len(edgeData))/2)
+		color = [3]float32{0.0, 0.0, 0.0};
+		gl.Uniform3fv(color_location, 1, &color[0]);
+
+		gl.BindVertexArray(edgeVAO)
+		gl.DrawArrays(gl.LINES, 0, int32(len(edgeData))/2)
 
 		glfw.PollEvents()
 		window.SwapBuffers()

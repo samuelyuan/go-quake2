@@ -21,9 +21,12 @@ const (
 
 	fragmentShaderSource = `
 		#version 410
+
+		uniform vec3 color;
 		out vec4 frag_colour;
 		void main() {
-			frag_colour = vec4(1, 1, 1, 1.0);
+			frag_colour.rgb = color;
+			frag_colour.a = 1.0;
 		}
 	` + "\x00"
 )
