@@ -10,11 +10,15 @@ const (
 	vertexShaderSource = `
 		#version 410
 	  layout (location = 0) in vec3 position;
+		layout (location = 1) in vec2 vertTexCoord;
+		out vec2 fragTexCoord;
 
     uniform mat4 view;
 		uniform mat4 projection;
 
 		void main() {
+			fragTexCoord = vertTexCoord;
+
 			gl_Position = projection * view * vec4(position, 1.0);
 		}
 	` + "\x00"
@@ -22,11 +26,13 @@ const (
 	fragmentShaderSource = `
 		#version 410
 
-		uniform vec3 color;
-		out vec4 frag_colour;
+		uniform sampler2D diffuse;
+		in vec2 fragTexCoord;
+		out vec4 fragColor;
+
 		void main() {
-			frag_colour.rgb = color;
-			frag_colour.a = 1.0;
+			vec4 diffuseColor = texture2D(diffuse, fragTexCoord.st);
+			fragColor = diffuseColor;
 		}
 	` + "\x00"
 )

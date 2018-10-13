@@ -49,22 +49,22 @@ type FaceEdge struct {
 }
 
 type TexInfo struct {
-	UAxis [3]float32
-	UOffset float32
-	VAxis [3]float32
-	VOffset float32
-	Flags uint32
-	Value uint32
+	UAxis       [3]float32
+	UOffset     float32
+	VAxis       [3]float32
+	VOffset     float32
+	Flags       uint32
+	Value       uint32
 	TextureName [32]byte
 	NextTexInfo int32
 }
 
 type MapData struct {
-	Vertices  []Vertex
-	Edges     []Edge
-	Faces     []Face
-	FaceEdges []FaceEdge
-	TexInfos  []TexInfo
+	Vertices   []Vertex
+	Edges      []Edge
+	Faces      []Face
+	FaceEdges  []FaceEdge
+	TexInfos   []TexInfo
 	TextureIds map[string]int
 }
 
@@ -117,11 +117,11 @@ func loadQ2BSP(r io.ReaderAt) (*MapData, error) {
 
 	// Combine into map data
 	mapData := &MapData{
-		Vertices:  vertices,
-		Edges:     edges,
-		Faces:     faces,
-		FaceEdges: faceEdges,
-		TexInfos: texInfos,
+		Vertices:   vertices,
+		Edges:      edges,
+		Faces:      faces,
+		FaceEdges:  faceEdges,
+		TexInfos:   texInfos,
 		TextureIds: textureIds,
 	}
 
@@ -228,7 +228,7 @@ func loadTexInfos(lump Lump, r io.ReaderAt) ([]TexInfo, error) {
 
 	fmt.Println("Tex info count:", num)
 
-	var data []TexInfo
+	data := make([]TexInfo, num)
 
 	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
 	for i := 0; i < num; i++ {
@@ -236,9 +236,9 @@ func loadTexInfos(lump Lump, r io.ReaderAt) ([]TexInfo, error) {
 		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
 			return nil, err
 		}
-
+		
 		// Add to array
-		data = append(data, newItem)
+		data[i] = newItem
 	}
 
 	return data, nil
@@ -246,18 +246,20 @@ func loadTexInfos(lump Lump, r io.ReaderAt) ([]TexInfo, error) {
 
 // Map each texture name to an id
 // There could be multiple textures with the same name.
-func getTextureIds(texInfos []TexInfo) (map[string]int) {
+func getTextureIds(texInfos []TexInfo) map[string]int {
 	textureIds := make(map[string]int)
 	nextId := 0
-	for _, texInfo := range texInfos {
+	for i := 0; i < len(texInfos); i++ {
+		texInfo := texInfos[i]
+
 		// convert filename byte array to string
 		filename := ""
-		for i := 0; i < len(texInfo.TextureName); i++ {
+		for j := 0; j < len(texInfo.TextureName); j++ {
 			// end of string
-			if texInfo.TextureName[i] == 0 {
-				break;
+			if texInfo.TextureName[j] == 0 {
+				break
 			}
-			filename += string(texInfo.TextureName[i])
+			filename += string(texInfo.TextureName[j])
 		}
 
 		// generate new id for texture if necessary
