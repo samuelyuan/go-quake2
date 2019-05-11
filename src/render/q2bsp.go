@@ -1,4 +1,4 @@
-package main
+package render
 
 import (
 	"bytes"
@@ -70,7 +70,7 @@ type MapData struct {
 
 // Read header to verify the file is valid
 // Parse the rest of the data and load it into a map
-func loadQ2BSP(r io.ReaderAt) (*MapData, error) {
+func LoadQ2BSP(r io.ReaderAt) (*MapData, error) {
 	header := Header{}
 
 	// Load header
@@ -236,7 +236,7 @@ func loadTexInfos(lump Lump, r io.ReaderAt) ([]TexInfo, error) {
 		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
 			return nil, err
 		}
-		
+
 		// Add to array
 		data[i] = newItem
 	}

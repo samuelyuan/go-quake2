@@ -1,4 +1,4 @@
-package main
+package render
 
 import (
 	"encoding/binary"
@@ -33,7 +33,7 @@ type WalHeader struct {
 }
 
 // Load image file
-func loadQ2WAL(r io.ReaderAt) ([]uint8, WalHeader, error) {
+func LoadQ2WAL(r io.ReaderAt) ([]uint8, WalHeader, error) {
 	// Read the header
 	walData := WalHeader{}
 	reader := io.NewSectionReader(r, int64(0), int64(unsafe.Sizeof(walData)))
@@ -56,9 +56,10 @@ func loadImage(walData WalHeader, r io.ReaderAt) ([]uint8, error) {
 	byteCount := walData.Width * walData.Height * 3
 	newImage := make([]uint8, byteCount)
 
+  reader := io.NewSectionReader(r, int64(unsafe.Sizeof(walData)), int64(byteCount))
 	for i := 0; i < int(byteCount); i += 3 {
 		paletteIndex := uint8(0)
-		reader := io.NewSectionReader(r, int64(unsafe.Sizeof(walData)), int64(unsafe.Sizeof(paletteIndex)))
+
 		if err := binary.Read(reader, binary.LittleEndian, &paletteIndex); err != nil {
 			return nil, err
 		}

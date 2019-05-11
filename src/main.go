@@ -1,6 +1,7 @@
 package main
 
 import (
+	"./render"
 	"fmt"
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
@@ -196,12 +197,12 @@ func initOpenGL() uint32 {
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	fmt.Println("OpenGL version", version)
 
-	shader := NewShader()
+	shader := render.NewShader()
 	return shader.ProgramShader
 }
 
 // Initialize texture in OpenGL using image data
-func buildTexture(imageData []uint8, walData WalHeader) uint32 {
+func buildTexture(imageData []uint8, walData render.WalHeader) uint32 {
 	var texId uint32
 	gl.GenTextures(1, &texId)
 	gl.BindTexture(gl.TEXTURE_2D, texId)
@@ -264,7 +265,7 @@ func drawMap(vertices []float32, mapTextures []MapTexture, programShader uint32)
 	return
 }
 
-func getVertex(mapData *MapData, faceEdgeIdx int) Vertex {
+func getVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
 	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
 
 	// Edge index is positive
@@ -278,13 +279,13 @@ func getVertex(mapData *MapData, faceEdgeIdx int) Vertex {
 	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
 }
 
-func getTextureUV(vtx Vertex, tex TexInfo) [2]float32 {
+func getTextureUV(vtx render.Vertex, tex render.TexInfo) [2]float32 {
 	u := float32(vtx.X*tex.UAxis[0] + vtx.Y*tex.UAxis[1] + vtx.Z*tex.UAxis[2] + tex.UOffset)
 	v := float32(vtx.X*tex.VAxis[0] + vtx.Y*tex.VAxis[1] + vtx.Z*tex.VAxis[2] + tex.VOffset)
 	return [2]float32{u, v}
 }
 
-func getTextureFilename(texInfo TexInfo) string {
+func getTextureFilename(texInfo render.TexInfo) string {
 	// convert filename byte array to string
 	filename := ""
 	for i := 0; i < len(texInfo.TextureName); i++ {
@@ -297,7 +298,7 @@ func getTextureFilename(texInfo TexInfo) string {
 	return filename
 }
 
-func createTriangleData(mapData *MapData, mapTextures []MapTexture) ([]float32, []MapTexture) {
+func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]float32, []MapTexture) {
 	vertsByTexture := make(map[int][]float32)
 
 	var offset uint16
@@ -399,7 +400,7 @@ func main() {
 	// Load files
 	fmt.Println("Starting quake2 bsp loader\n")
 
-	file, _ := os.Open("test.bsp")
+	file, _ := os.Open("./data/test.bsp")
 	defer file.Close()
 
 	if file == nil {
@@ -407,7 +408,7 @@ func main() {
 		return
 	}
 
-	mapData, err := loadQ2BSP(file)
+	mapData, err := render.LoadQ2BSP(file)
 	if err != nil {
 		log.Fatal("Error loading bsp in main:", err)
 		return
@@ -419,7 +420,7 @@ func main() {
 	window := initGLFW()
 	programShader := initOpenGL()
 
-	gl.ClearColor(0, 0.5, 1.0, 1.0)
+	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 
 	// get sorted strings
 	var fileKeys []string
@@ -433,7 +434,7 @@ func main() {
 	for i := 0; i < len(fileKeys); i++{
 		// stored in different folder
 		// append extension (.wal) as default
-		fullFilename := "textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
+		fullFilename := "./data/textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
 
 		texFile, _ := os.Open(fullFilename)
 		defer texFile.Close()
@@ -443,7 +444,7 @@ func main() {
 			return
 		}
 
-		imageData, walData, err := loadQ2WAL(texFile)
+		imageData, walData, err := render.LoadQ2WAL(texFile)
 		if err != nil {
 			log.Fatal("Error loading texture in main:", err)
 			return
