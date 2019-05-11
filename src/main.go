@@ -40,13 +40,13 @@ var (
 	lastX      float64
 	lastY      float64
 
-	pressed 	[256]bool
+	pressed [256]bool
 )
 
 type MapTexture struct {
-	Id uint32
-	Width uint32
-	Height uint32
+	Id         uint32
+	Width      uint32
+	Height     uint32
 	VertOffset int32
 	VertCount  int32
 }
@@ -131,16 +131,16 @@ func keyCallback(window *glfw.Window, key glfw.Key, scancode int, action glfw.Ac
 
 	velocity := float32(0.5 * deltaTime)
 
-	if (pressed[glfw.KeyW]) {
+	if pressed[glfw.KeyW] {
 		// forward
 		position = position.Add(cameraFront.Mul(velocity))
-	} else if (pressed[glfw.KeyS]) {
+	} else if pressed[glfw.KeyS] {
 		// backward
 		position = position.Sub(cameraFront.Mul(velocity))
-	} else if (pressed[glfw.KeyA]) {
+	} else if pressed[glfw.KeyA] {
 		// left
 		position = position.Sub(right.Mul(velocity))
-	} else if (pressed[glfw.KeyD]) {
+	} else if pressed[glfw.KeyD] {
 		// right
 		position = position.Add(right.Mul(velocity))
 	}
@@ -250,13 +250,13 @@ func drawMap(vertices []float32, mapTextures []MapTexture, programShader uint32)
 	for i := 0; i < len(mapTextures); i++ {
 		texture := mapTextures[i]
 
-		if (texture.VertCount == 0) {
-			continue;
+		if texture.VertCount == 0 {
+			continue
 		}
 
 		// Bind the texture
-		gl.ActiveTexture(gl.TEXTURE0);
-		gl.BindTexture(gl.TEXTURE_2D, texture.Id);
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_2D, texture.Id)
 
 		// Draw all faces for this texture
 		gl.DrawArrays(gl.TRIANGLES, texture.VertOffset, texture.VertCount)
@@ -298,6 +298,50 @@ func getTextureFilename(texInfo render.TexInfo) string {
 	return filename
 }
 
+func createTextureList(textureIds map[string]int) []MapTexture {
+	// get sorted strings
+	var fileKeys []string
+	for texFilename, _ := range textureIds {
+		fileKeys = append(fileKeys, texFilename)
+	}
+	sort.Strings(fileKeys)
+
+	// iterate through filenames in the same order
+	oldMapTextures := make([]MapTexture, len(fileKeys))
+	for i := 0; i < len(fileKeys); i++ {
+		// stored in different folder
+		// append extension (.wal) as default
+		fullFilename := "./data/textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
+
+		texFile, _ := os.Open(fullFilename)
+		defer texFile.Close()
+
+		if texFile == nil {
+			log.Fatal("Texture file doesn't exist")
+			return nil
+		}
+
+		imageData, walData, err := render.LoadQ2WAL(texFile)
+		if err != nil {
+			log.Fatal("Error loading texture in main:", err)
+			return nil
+		}
+
+		// Initialize texture
+		texId := buildTexture(imageData, walData)
+
+		// the index is not necessarily in order
+		index := textureIds[fileKeys[i]]
+		oldMapTextures[index] = MapTexture{}
+		oldMapTextures[index].Width = walData.Width
+		oldMapTextures[index].Height = walData.Height
+		// opengl texture id
+		oldMapTextures[index].Id = texId
+	}
+
+	return oldMapTextures
+}
+
 func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]float32, []MapTexture) {
 	vertsByTexture := make(map[int][]float32)
 
@@ -307,8 +351,8 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 		texInfo := mapData.TexInfos[faceInfo.TextureInfo]
 
 		// hide skybox
-		if (texInfo.Flags & 4 != 0) {
-			continue;
+		if texInfo.Flags&4 != 0 {
+			continue
 		}
 
 		// get index in texture array
@@ -370,24 +414,24 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 
 		for j := 0; j < int(texVertSize); j += 5 {
 			arr := vertsByTexture[texKeys[i]]
-			x := arr[j + 0]
-			y := arr[j + 1]
-			z := arr[j + 2]
+			x := arr[j+0]
+			y := arr[j+1]
+			z := arr[j+2]
 
-			u := arr[j + 3]
-			v := arr[j + 4]
+			u := arr[j+3]
+			v := arr[j+4]
 
 			// Position
 			scale := float32(500.0)
-			fullBuffer[bufferOffset + 0] = x / scale
-			fullBuffer[bufferOffset + 1] = y / scale
-			fullBuffer[bufferOffset + 2] = z / scale
+			fullBuffer[bufferOffset+0] = x / scale
+			fullBuffer[bufferOffset+1] = y / scale
+			fullBuffer[bufferOffset+2] = z / scale
 
 			// UV
 			width := float32(copyMapTextures[texKeys[i]].Width)
 			height := float32(copyMapTextures[texKeys[i]].Height)
-			fullBuffer[bufferOffset + 3] = u / width
-			fullBuffer[bufferOffset + 4] = v / height
+			fullBuffer[bufferOffset+3] = u / width
+			fullBuffer[bufferOffset+4] = v / height
 
 			bufferOffset += 5
 		}
@@ -422,44 +466,9 @@ func main() {
 
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 
-	// get sorted strings
-	var fileKeys []string
-	for texFilename, _ := range mapData.TextureIds {
-		fileKeys = append(fileKeys, texFilename)
-	}
-	sort.Strings(fileKeys)
-
-	// iterate through filenames in the same order
-	oldMapTextures := make([]MapTexture, len(fileKeys))
-	for i := 0; i < len(fileKeys); i++{
-		// stored in different folder
-		// append extension (.wal) as default
-		fullFilename := "./data/textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
-
-		texFile, _ := os.Open(fullFilename)
-		defer texFile.Close()
-
-		if texFile == nil {
-			log.Fatal("Texture file doesn't exist")
-			return
-		}
-
-		imageData, walData, err := render.LoadQ2WAL(texFile)
-		if err != nil {
-			log.Fatal("Error loading texture in main:", err)
-			return
-		}
-
-		// Initialize texture
-		texId := buildTexture(imageData, walData)
-
-		// the index is not necessarily in order
-		index := mapData.TextureIds[fileKeys[i]]
-		oldMapTextures[index] = MapTexture{}
-		oldMapTextures[index].Width = walData.Width
-		oldMapTextures[index].Height = walData.Height
-		// opengl texture id
-		oldMapTextures[index].Id = texId
+	oldMapTextures := createTextureList(mapData.TextureIds)
+	if oldMapTextures == nil {
+		return
 	}
 	fmt.Println("Textures successfully loaded")
 
