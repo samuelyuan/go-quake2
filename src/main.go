@@ -24,8 +24,8 @@ const (
 var (
 	position    = mgl32.Vec3{0, 0, 3}.Normalize()
 	cameraFront = mgl32.Vec3{0, 0, -1}.Normalize()
-	cameraUp    = mgl32.Vec3{0, 1, 3}.Normalize()
-	right       = cameraFront.Cross(cameraUp).Normalize()
+	cameraUp    = mgl32.Vec3{0, 0, 1}.Normalize()
+	cameraRight = cameraFront.Cross(cameraUp).Normalize()
 
 	// Used for movement
 	deltaTime = 0.0
@@ -34,11 +34,6 @@ var (
 	// Eular angles (in degrees)
 	yaw   = -90.0
 	pitch = 0.0
-
-	// Mouse settings
-	firstMouse = true
-	lastX      float64
-	lastY      float64
 
 	inputHandler *InputHandler
 )
@@ -54,45 +49,6 @@ type MapTexture struct {
 // Resize the screen
 func resizeCallback(w *glfw.Window, width int, height int) {
 	gl.Viewport(0, 0, int32(width), int32(height))
-}
-
-func mouseCallback(w *glfw.Window, xPos float64, yPos float64) {
-	if firstMouse {
-		lastX = xPos
-		lastY = yPos
-		firstMouse = false
-	}
-
-	xOffset := xPos - lastX
-	// reversed
-	yOffset := lastY - yPos
-
-	lastX = xPos
-	lastY = yPos
-
-	xOffset *= MouseSensitivity
-	yOffset *= MouseSensitivity
-
-	yaw += xOffset
-	pitch += yOffset
-
-	// Make sure that when pitch is out of bounds, screen doesn't get flipped
-	if pitch > 89.0 {
-		pitch = 89.0
-	}
-	if pitch < -89.0 {
-		pitch = -89.0
-	}
-
-	// Update vectors using the updated Euler angles
-	x := float32(math.Cos(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
-	y := float32(math.Sin(mgl64.DegToRad(pitch)))
-	z := float32(math.Sin(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
-	front := mgl32.Vec3{x, y, z}
-
-	// recalculate vectors
-	cameraFront = front.Normalize()
-	right = cameraFront.Cross(cameraUp).Normalize()
 }
 
 func GetViewMatrix() mgl32.Mat4 {
@@ -118,10 +74,36 @@ func checkInput() {
 	} else if inputHandler.isActive(PLAYER_BACKWARD) {
 		position = position.Sub(cameraFront.Mul(velocity))
 	} else if inputHandler.isActive(PLAYER_LEFT) {
-		position = position.Sub(right.Mul(velocity))
+		position = position.Sub(cameraRight.Mul(velocity))
 	} else if inputHandler.isActive(PLAYER_RIGHT) {
-		position = position.Add(right.Mul(velocity))
+		position = position.Add(cameraRight.Mul(velocity))
 	}
+
+  inputHandler.updateCursor()
+  offset := inputHandler.getCursorChange()
+	xOffset := offset[0] * MouseSensitivity
+	yOffset := offset[1] * MouseSensitivity
+
+	yaw += xOffset
+	pitch += yOffset
+
+	// Make sure that when pitch is out of bounds, screen doesn't get flipped
+	if pitch > 89.0 {
+		pitch = 89.0
+	}
+	if pitch < -89.0 {
+		pitch = -89.0
+	}
+
+	// Update vectors using the updated Euler angles
+	x := float32(math.Cos(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
+	y := float32(math.Sin(mgl64.DegToRad(pitch)))
+	z := float32(math.Sin(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
+	front := mgl32.Vec3{x, y, z}
+
+	// recalculate vectors
+	cameraFront = front.Normalize()
+	cameraRight = cameraFront.Cross(cameraUp).Normalize()
 }
 
 func initGLFW() *glfw.Window {
@@ -151,7 +133,7 @@ func initGLFW() *glfw.Window {
 	// Keyboard callback
 	window.SetKeyCallback(inputHandler.keyCallback)
 	// Mouse callback
-	window.SetCursorPosCallback(mouseCallback)
+	window.SetCursorPosCallback(inputHandler.mouseCallback)
 
 	return window
 }
@@ -160,10 +142,6 @@ func initOpenGL() uint32 {
 	if err := gl.Init(); err != nil {
 		panic(err)
 	}
-
-	lastX = windowWidth / 2.0
-	lastY = windowHeight / 2.0
-	firstMouse = true
 
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	fmt.Println("OpenGL version", version)

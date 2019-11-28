@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/go-gl/glfw/v3.2/glfw"
+  "github.com/go-gl/mathgl/mgl64"
 )
 
 type Action int
@@ -17,6 +18,12 @@ const (
 type InputHandler struct {
 	actionToKeyMap map[Action]glfw.Key
 	keysPressed [glfw.KeyLast]bool
+
+  firstCursorAction bool
+	cursor mgl64.Vec2
+	cursorChange mgl64.Vec2
+	cursorLast mgl64.Vec2
+	bufferedCursorChange mgl64.Vec2
 }
 
 func NewInputHandler() *InputHandler {
@@ -30,6 +37,7 @@ func NewInputHandler() *InputHandler {
 
 	return &InputHandler{
 		actionToKeyMap: actionToKeyMap,
+    firstCursorAction: false,
 	}
 }
 
@@ -46,4 +54,32 @@ func (handler *InputHandler) keyCallback(window *glfw.Window, key glfw.Key, scan
 	case glfw.Release:
 		handler.keysPressed[key] = false
 	}
+}
+
+func (handler *InputHandler) getCursorChange() mgl64.Vec2 {
+	return handler.cursorChange
+}
+
+func (handler *InputHandler) updateCursor() {
+	handler.cursorChange[0] = handler.bufferedCursorChange[0]
+	handler.cursorChange[1] = handler.bufferedCursorChange[1]
+	handler.cursor[0] = handler.cursorLast[0]
+	handler.cursor[1] = handler.cursorLast[1]
+
+	handler.bufferedCursorChange[0] = 0
+	handler.bufferedCursorChange[1] = 0
+}
+
+func (handler *InputHandler) mouseCallback(window *glfw.Window, xPos float64, yPos float64) {
+	if handler.firstCursorAction {
+		handler.cursorLast[0] = xPos
+		handler.cursorLast[1] = yPos
+		handler.firstCursorAction = false
+	}
+
+	handler.bufferedCursorChange[0] += xPos - handler.cursorLast[0]
+	handler.bufferedCursorChange[1] += handler.cursorLast[1] - yPos
+
+	handler.cursorLast[0] = xPos
+	handler.cursorLast[1] = yPos
 }
