@@ -40,7 +40,7 @@ var (
 	lastX      float64
 	lastY      float64
 
-	pressed [256]bool
+	inputHandler *InputHandler
 )
 
 type MapTexture struct {
@@ -95,34 +95,16 @@ func mouseCallback(w *glfw.Window, xPos float64, yPos float64) {
 	right = cameraFront.Cross(cameraUp).Normalize()
 }
 
-func keyCallback(window *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
-	if action == glfw.Release {
-		pressed[glfw.KeyW] = false
-		pressed[glfw.KeyS] = false
-		pressed[glfw.KeyA] = false
-		pressed[glfw.KeyD] = false
-	}
+func GetViewMatrix() mgl32.Mat4 {
+	eye := position
+	center := position.Add(cameraFront)
+	return mgl32.LookAt(
+		eye.X(), eye.Y(), eye.Z(),
+		center.X(), center.Y(), center.Z(),
+		cameraUp.X(), cameraUp.Y(), cameraUp.Z())
+}
 
-	if action == glfw.Press {
-		// Quit the program if the escape key is pressed
-		if key == glfw.KeyEscape {
-			window.SetShouldClose(true)
-		}
-
-		if key == glfw.KeyW {
-			pressed[glfw.KeyW] = true
-		}
-		if key == glfw.KeyS {
-			pressed[glfw.KeyS] = true
-		}
-		if key == glfw.KeyA {
-			pressed[glfw.KeyA] = true
-		}
-		if key == glfw.KeyD {
-			pressed[glfw.KeyD] = true
-		}
-	}
-
+func checkInput() {
 	// Move the camera around using WASD keys
 	// Set frame time
 	currentFrame := glfw.GetTime()
@@ -131,28 +113,15 @@ func keyCallback(window *glfw.Window, key glfw.Key, scancode int, action glfw.Ac
 
 	velocity := float32(0.5 * deltaTime)
 
-	if pressed[glfw.KeyW] {
-		// forward
+	if inputHandler.isActive(PLAYER_FORWARD) {
 		position = position.Add(cameraFront.Mul(velocity))
-	} else if pressed[glfw.KeyS] {
-		// backward
+	} else if inputHandler.isActive(PLAYER_BACKWARD) {
 		position = position.Sub(cameraFront.Mul(velocity))
-	} else if pressed[glfw.KeyA] {
-		// left
+	} else if inputHandler.isActive(PLAYER_LEFT) {
 		position = position.Sub(right.Mul(velocity))
-	} else if pressed[glfw.KeyD] {
-		// right
+	} else if inputHandler.isActive(PLAYER_RIGHT) {
 		position = position.Add(right.Mul(velocity))
 	}
-}
-
-func GetViewMatrix() mgl32.Mat4 {
-	eye := position
-	center := position.Add(cameraFront)
-	return mgl32.LookAt(
-		eye.X(), eye.Y(), eye.Z(),
-		center.X(), center.Y(), center.Z(),
-		cameraUp.X(), cameraUp.Y(), cameraUp.Z())
 }
 
 func initGLFW() *glfw.Window {
@@ -177,8 +146,10 @@ func initGLFW() *glfw.Window {
 	window.SetSizeCallback(resizeCallback)
 	window.GetSize()
 
+	inputHandler = NewInputHandler()
+
 	// Keyboard callback
-	window.SetKeyCallback(keyCallback)
+	window.SetKeyCallback(inputHandler.keyCallback)
 	// Mouse callback
 	window.SetCursorPosCallback(mouseCallback)
 
@@ -500,5 +471,11 @@ func main() {
 		// Window events for keyboard and mouse
 		glfw.PollEvents()
 		window.SwapBuffers()
+
+		if inputHandler.isActive(PROGRAM_QUIT) {
+			window.SetShouldClose(true)
+		}
+
+		checkInput()
 	}
 }
