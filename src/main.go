@@ -279,10 +279,10 @@ func getVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
 	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
 }
 
-func getTextureUV(vtx render.Vertex, tex render.TexInfo) [2]float32 {
+func getTextureUV(vtx render.Vertex, tex render.TexInfo, mapTexture MapTexture) [2]float32 {
 	u := float32(vtx.X*tex.UAxis[0] + vtx.Y*tex.UAxis[1] + vtx.Z*tex.UAxis[2] + tex.UOffset)
 	v := float32(vtx.X*tex.VAxis[0] + vtx.Y*tex.VAxis[1] + vtx.Z*tex.VAxis[2] + tex.VOffset)
-	return [2]float32{u, v}
+	return [2]float32{u / float32(mapTexture.Width), v / float32(mapTexture.Height)}
 }
 
 func getTextureFilename(texInfo render.TexInfo) string {
@@ -364,16 +364,18 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 			vertsByTexture[texId] = make([]float32, 0)
 		}
 
+		mapTexture := mapTextures[texId]
+
 		v0 := getVertex(mapData, int(faceInfo.FirstEdge))
-		uv0 := getTextureUV(v0, texInfo)
+		uv0 := getTextureUV(v0, texInfo, mapTexture)
 		v1 := getVertex(mapData, int(faceInfo.FirstEdge)+1)
-		uv1 := getTextureUV(v1, texInfo)
+		uv1 := getTextureUV(v1, texInfo, mapTexture)
 
 		// Generate triangle fan from polyglon
 		var faceData []float32
 		for offset = 2; offset < faceInfo.NumEdges; offset++ {
 			v2 := getVertex(mapData, int(faceInfo.FirstEdge)+int(offset))
-			uv2 := getTextureUV(v2, texInfo)
+			uv2 := getTextureUV(v2, texInfo, mapTexture)
 
 			// Add triangle
 			faceData = append(faceData, v0.X, v0.Y, v0.Z, uv0[0], uv0[1])
@@ -428,10 +430,8 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 			fullBuffer[bufferOffset+2] = z / scale
 
 			// UV
-			width := float32(copyMapTextures[texKeys[i]].Width)
-			height := float32(copyMapTextures[texKeys[i]].Height)
-			fullBuffer[bufferOffset+3] = u / width
-			fullBuffer[bufferOffset+4] = v / height
+			fullBuffer[bufferOffset+3] = u
+			fullBuffer[bufferOffset+4] = v
 
 			bufferOffset += 5
 		}
