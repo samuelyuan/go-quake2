@@ -35,7 +35,7 @@ var (
 	yaw   = -90.0
 	pitch = 0.0
 
-	inputHandler *InputHandler
+	windowHandler *WindowHandler
 )
 
 type MapTexture struct {
@@ -44,11 +44,6 @@ type MapTexture struct {
 	Height     uint32
 	VertOffset int32
 	VertCount  int32
-}
-
-// Resize the screen
-func resizeCallback(w *glfw.Window, width int, height int) {
-	gl.Viewport(0, 0, int32(width), int32(height))
 }
 
 func GetViewMatrix() mgl32.Mat4 {
@@ -69,18 +64,18 @@ func checkInput() {
 
 	velocity := float32(0.5 * deltaTime)
 
-	if inputHandler.isActive(PLAYER_FORWARD) {
+	if windowHandler.inputHandler.isActive(PLAYER_FORWARD) {
 		position = position.Add(cameraFront.Mul(velocity))
-	} else if inputHandler.isActive(PLAYER_BACKWARD) {
+	} else if windowHandler.inputHandler.isActive(PLAYER_BACKWARD) {
 		position = position.Sub(cameraFront.Mul(velocity))
-	} else if inputHandler.isActive(PLAYER_LEFT) {
+	} else if windowHandler.inputHandler.isActive(PLAYER_LEFT) {
 		position = position.Sub(cameraRight.Mul(velocity))
-	} else if inputHandler.isActive(PLAYER_RIGHT) {
+	} else if windowHandler.inputHandler.isActive(PLAYER_RIGHT) {
 		position = position.Add(cameraRight.Mul(velocity))
 	}
 
-  inputHandler.updateCursor()
-  offset := inputHandler.getCursorChange()
+	windowHandler.inputHandler.updateCursor()
+	offset := windowHandler.inputHandler.getCursorChange()
 	xOffset := offset[0] * MouseSensitivity
 	yOffset := offset[1] * MouseSensitivity
 
@@ -104,38 +99,12 @@ func checkInput() {
 	// recalculate vectors
 	cameraFront = front.Normalize()
 	cameraRight = cameraFront.Cross(cameraUp).Normalize()
+	cameraUp = cameraRight.Cross(cameraFront).Normalize()
 }
 
 func initGLFW() *glfw.Window {
-	if err := glfw.Init(); err != nil {
-		panic(fmt.Errorf("Could not initialize glfw: %v", err))
-	}
-
-	// Initialize and create window
-	glfw.WindowHint(glfw.ContextVersionMajor, 4)
-	glfw.WindowHint(glfw.ContextVersionMinor, 1)
-	glfw.WindowHint(glfw.Resizable, glfw.True)
-	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
-	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
-
-	window, err := glfw.CreateWindow(windowWidth, windowHeight, "Quake 2 BSP Loader", nil, nil)
-	if err != nil {
-		panic(fmt.Errorf("Could not create OpenGL renderer: %v", err))
-	}
-	window.MakeContextCurrent()
-
-	// Check for resize
-	window.SetSizeCallback(resizeCallback)
-	window.GetSize()
-
-	inputHandler = NewInputHandler()
-
-	// Keyboard callback
-	window.SetKeyCallback(inputHandler.keyCallback)
-	// Mouse callback
-	window.SetCursorPosCallback(inputHandler.mouseCallback)
-
-	return window
+	windowHandler = NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
+	return windowHandler.glfwWindow
 }
 
 func initOpenGL() uint32 {
@@ -450,7 +419,7 @@ func main() {
 		glfw.PollEvents()
 		window.SwapBuffers()
 
-		if inputHandler.isActive(PROGRAM_QUIT) {
+		if windowHandler.inputHandler.isActive(PROGRAM_QUIT) {
 			window.SetShouldClose(true)
 		}
 

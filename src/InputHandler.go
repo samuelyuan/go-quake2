@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/go-gl/glfw/v3.2/glfw"
-  "github.com/go-gl/mathgl/mgl64"
+	"github.com/go-gl/mathgl/mgl64"
 )
 
 type Action int
@@ -17,12 +17,12 @@ const (
 
 type InputHandler struct {
 	actionToKeyMap map[Action]glfw.Key
-	keysPressed [glfw.KeyLast]bool
+	keysPressed    [glfw.KeyLast]bool
 
-  firstCursorAction bool
-	cursor mgl64.Vec2
-	cursorChange mgl64.Vec2
-	cursorLast mgl64.Vec2
+	firstCursorAction    bool
+	cursor               mgl64.Vec2
+	cursorChange         mgl64.Vec2
+	cursorLast           mgl64.Vec2
 	bufferedCursorChange mgl64.Vec2
 }
 
@@ -36,8 +36,8 @@ func NewInputHandler() *InputHandler {
 	}
 
 	return &InputHandler{
-		actionToKeyMap: actionToKeyMap,
-    firstCursorAction: false,
+		actionToKeyMap:    actionToKeyMap,
+		firstCursorAction: false,
 	}
 }
 
