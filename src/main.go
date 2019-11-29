@@ -4,7 +4,6 @@ import (
 	"./render"
 	"fmt"
 	"github.com/go-gl/gl/v4.1-core/gl"
-	"github.com/go-gl/glfw/v3.2/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/go-gl/mathgl/mgl64"
 	"log"
@@ -26,10 +25,6 @@ var (
 	cameraFront = mgl32.Vec3{0, 0, -1}.Normalize()
 	cameraUp    = mgl32.Vec3{0, 0, 1}.Normalize()
 	cameraRight = cameraFront.Cross(cameraUp).Normalize()
-
-	// Used for movement
-	deltaTime = 0.0
-	lastFrame = 0.0
 
 	// Eular angles (in degrees)
 	yaw   = -90.0
@@ -57,12 +52,7 @@ func GetViewMatrix() mgl32.Mat4 {
 
 func checkInput() {
 	// Move the camera around using WASD keys
-	// Set frame time
-	currentFrame := glfw.GetTime()
-	deltaTime = currentFrame - lastFrame
-	lastFrame = currentFrame
-
-	velocity := float32(0.5 * deltaTime)
+	velocity := float32(0.5 * windowHandler.getTimeSinceLastFrame())
 
 	if windowHandler.inputHandler.isActive(PLAYER_FORWARD) {
 		position = position.Add(cameraFront.Mul(velocity))
@@ -74,7 +64,6 @@ func checkInput() {
 		position = position.Add(cameraRight.Mul(velocity))
 	}
 
-	windowHandler.inputHandler.updateCursor()
 	offset := windowHandler.inputHandler.getCursorChange()
 	xOffset := offset[0] * MouseSensitivity
 	yOffset := offset[1] * MouseSensitivity
@@ -100,11 +89,6 @@ func checkInput() {
 	cameraFront = front.Normalize()
 	cameraRight = cameraFront.Cross(cameraUp).Normalize()
 	cameraUp = cameraRight.Cross(cameraFront).Normalize()
-}
-
-func initGLFW() *glfw.Window {
-	windowHandler = NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
-	return windowHandler.glfwWindow
 }
 
 func initOpenGL() uint32 {
@@ -379,7 +363,7 @@ func main() {
 
 	// Run OpenGL code
 	runtime.LockOSThread()
-	window := initGLFW()
+	windowHandler = NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
 	programShader := initOpenGL()
 
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
@@ -392,7 +376,9 @@ func main() {
 
 	triangleData, mapTextures := createTriangleData(mapData, oldMapTextures)
 
-	for !window.ShouldClose() {
+	for !windowHandler.shouldClose() {
+		windowHandler.startFrame()
+
 		gl.Enable(gl.DEPTH_TEST)
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
@@ -414,14 +400,6 @@ func main() {
 
 		// Render map data to the screen
 		drawMap(triangleData, mapTextures, programShader)
-
-		// Window events for keyboard and mouse
-		glfw.PollEvents()
-		window.SwapBuffers()
-
-		if windowHandler.inputHandler.isActive(PROGRAM_QUIT) {
-			window.SetShouldClose(true)
-		}
 
 		checkInput()
 	}
