@@ -16,10 +16,6 @@ type WindowHandler struct {
 }
 
 func NewWindowHandler(width, height int, title string) *WindowHandler {
-	if err := glfw.Init(); err != nil {
-		panic(fmt.Errorf("Could not initialize glfw: %v", err))
-	}
-
 	// Initialize and create window
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 1)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/go-gl/mathgl/mgl64"
+	"github.com/go-gl/glfw/v3.2/glfw"
 	"log"
 	"math"
 	"os"
@@ -17,18 +17,13 @@ import (
 const (
 	windowWidth      = 800
 	windowHeight     = 600
-	MouseSensitivity = 0.1
+	MouseSensitivity = 0.9
 )
 
 var (
-	position    = mgl32.Vec3{0, 0, 3}.Normalize()
-	cameraFront = mgl32.Vec3{0, 0, -1}.Normalize()
-	cameraUp    = mgl32.Vec3{0, 0, 1}.Normalize()
-	cameraRight = cameraFront.Cross(cameraUp).Normalize()
-
-	// Eular angles (in degrees)
-	yaw   = -90.0
-	pitch = 0.0
+	xAngle         = float32(0)
+	zAngle         = float32(3)
+	cameraPosition = mgl32.Vec3{-1024, -512, -512}
 
 	windowHandler *WindowHandler
 )
@@ -42,53 +37,56 @@ type MapTexture struct {
 }
 
 func GetViewMatrix() mgl32.Mat4 {
-	eye := position
-	center := position.Add(cameraFront)
-	return mgl32.LookAt(
-		eye.X(), eye.Y(), eye.Z(),
-		center.X(), center.Y(), center.Z(),
-		cameraUp.X(), cameraUp.Y(), cameraUp.Z())
+	matrix := mgl32.Ident4()
+	matrix = matrix.Mul4(mgl32.HomogRotate3DX(xAngle - mgl32.DegToRad(90)))
+	matrix = matrix.Mul4(mgl32.HomogRotate3DZ(zAngle))
+	matrix = matrix.Mul4(mgl32.Translate3D(cameraPosition.X(), cameraPosition.Y(), cameraPosition.Z()))
+	return matrix
 }
 
 func checkInput() {
 	// Move the camera around using WASD keys
-	velocity := float32(0.5 * windowHandler.getTimeSinceLastFrame())
+	// velocity := float32(0.5 * windowHandler.getTimeSinceLastFrame())
 
+	speed := float32(15)
+	dir := []float32{0, 0, 0}
 	if windowHandler.inputHandler.isActive(PLAYER_FORWARD) {
-		position = position.Add(cameraFront.Mul(velocity))
+		dir[2] += speed
 	} else if windowHandler.inputHandler.isActive(PLAYER_BACKWARD) {
-		position = position.Sub(cameraFront.Mul(velocity))
+		dir[2] -= speed
 	} else if windowHandler.inputHandler.isActive(PLAYER_LEFT) {
-		position = position.Sub(cameraRight.Mul(velocity))
+		dir[0] += speed
 	} else if windowHandler.inputHandler.isActive(PLAYER_RIGHT) {
-		position = position.Add(cameraRight.Mul(velocity))
+		dir[0] -= speed
 	}
+
+	cameraMatrix := mgl32.Ident4()
+	cameraMatrix = cameraMatrix.Mul4(mgl32.HomogRotate3DX(xAngle - mgl32.DegToRad(90)))
+	cameraMatrix = cameraMatrix.Mul4(mgl32.HomogRotate3DZ(zAngle))
+	cameraMatrix = cameraMatrix.Inv()
+	movementDelta := cameraMatrix.Mul4x1(mgl32.Vec4{dir[0], dir[1], dir[2], 0.0})
+
+	cameraPosition = cameraPosition.Add(mgl32.Vec3{movementDelta.X(), movementDelta.Y(), movementDelta.Z()})
 
 	offset := windowHandler.inputHandler.getCursorChange()
-	xOffset := offset[0] * MouseSensitivity
-	yOffset := offset[1] * MouseSensitivity
+	xOffset := float32(offset[0] * MouseSensitivity)
+	yOffset := float32(offset[1] * MouseSensitivity)
 
-	yaw += xOffset
-	pitch += yOffset
-
-	// Make sure that when pitch is out of bounds, screen doesn't get flipped
-	if pitch > 89.0 {
-		pitch = 89.0
+	zAngle += xOffset * 0.025
+	for zAngle < 0 {
+		zAngle += math.Pi * 2
 	}
-	if pitch < -89.0 {
-		pitch = -89.0
+	for zAngle >= math.Pi*2 {
+		zAngle -= math.Pi * 2
 	}
 
-	// Update vectors using the updated Euler angles
-	x := float32(math.Cos(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
-	y := float32(math.Sin(mgl64.DegToRad(pitch)))
-	z := float32(math.Sin(mgl64.DegToRad(yaw)) * math.Cos(mgl64.DegToRad(pitch)))
-	front := mgl32.Vec3{x, y, z}
-
-	// recalculate vectors
-	cameraFront = front.Normalize()
-	cameraRight = cameraFront.Cross(cameraUp).Normalize()
-	cameraUp = cameraRight.Cross(cameraFront).Normalize()
+	xAngle += yOffset * 0.025
+	for xAngle < -math.Pi*0.5 {
+		xAngle = -math.Pi * 0.5
+	}
+	for xAngle > math.Pi*0.5 {
+		xAngle = math.Pi * 0.5
+	}
 }
 
 func initOpenGL() uint32 {
@@ -167,7 +165,7 @@ func drawMap(vertices []float32, mapTextures []MapTexture, programShader uint32)
 	return
 }
 
-func getVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
+func getEdgeVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
 	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
 
 	// Edge index is positive
@@ -268,15 +266,15 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 
 		mapTexture := mapTextures[texId]
 
-		v0 := getVertex(mapData, int(faceInfo.FirstEdge))
+		v0 := getEdgeVertex(mapData, int(faceInfo.FirstEdge))
 		uv0 := getTextureUV(v0, texInfo, mapTexture)
-		v1 := getVertex(mapData, int(faceInfo.FirstEdge)+1)
+		v1 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+1)
 		uv1 := getTextureUV(v1, texInfo, mapTexture)
 
 		// Generate triangle fan from polyglon
 		var faceData []float32
 		for offset = 2; offset < faceInfo.NumEdges; offset++ {
-			v2 := getVertex(mapData, int(faceInfo.FirstEdge)+int(offset))
+			v2 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+int(offset))
 			uv2 := getTextureUV(v2, texInfo, mapTexture)
 
 			// Add triangle
@@ -326,10 +324,9 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 			v := arr[j+4]
 
 			// Position
-			scale := float32(500.0)
-			fullBuffer[bufferOffset+0] = x / scale
-			fullBuffer[bufferOffset+1] = y / scale
-			fullBuffer[bufferOffset+2] = z / scale
+			fullBuffer[bufferOffset+0] = x
+			fullBuffer[bufferOffset+1] = y
+			fullBuffer[bufferOffset+2] = z
 
 			// UV
 			fullBuffer[bufferOffset+3] = u
@@ -342,37 +339,51 @@ func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]fl
 	return fullBuffer, copyMapTextures
 }
 
-func main() {
-	// Load files
-	fmt.Println("Starting quake2 bsp loader\n")
-
-	file, _ := os.Open("./data/test.bsp")
+func initMesh(bspFilename string) (*render.MapData, []MapTexture, error) {
+	file, err := os.Open(bspFilename)
 	defer file.Close()
 
 	if file == nil {
 		log.Fatal("BSP file doesn't exist")
-		return
+		return nil, nil, err
 	}
 
 	mapData, err := render.LoadQ2BSP(file)
 	if err != nil {
 		log.Fatal("Error loading bsp in main:", err)
-		return
+		return nil, nil, err
 	}
 	fmt.Println("Map data successfully loaded")
 
+	oldMapTextures := createTextureList(mapData.TextureIds)
+	if oldMapTextures == nil {
+		fmt.Println("old map textures: ", oldMapTextures)
+		return nil, nil, fmt.Errorf("Error loading textures")
+	}
+	fmt.Println("Textures successfully loaded")
+	return mapData, oldMapTextures, nil
+}
+
+func main() {
+	fmt.Println("Starting quake2 bsp loader\n")
+
 	// Run OpenGL code
 	runtime.LockOSThread()
+	if err := glfw.Init(); err != nil {
+		panic(fmt.Errorf("Could not initialize glfw: %v", err))
+	}
+	defer glfw.Terminate()
 	windowHandler = NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
 	programShader := initOpenGL()
 
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 
-	oldMapTextures := createTextureList(mapData.TextureIds)
-	if oldMapTextures == nil {
+	// Load files
+	mapData, oldMapTextures, err := initMesh("./data/test.bsp")
+	if err != nil {
+		fmt.Println("Error initializing mesh: ", err)
 		return
 	}
-	fmt.Println("Textures successfully loaded")
 
 	triangleData, mapTextures := createTriangleData(mapData, oldMapTextures)
 
@@ -388,7 +399,7 @@ func main() {
 		// Create transformations
 		view := GetViewMatrix()
 		ratio := float64(windowWidth) / float64(windowHeight)
-		projection := mgl32.Perspective(45.0, float32(ratio), 0.1, 100.0)
+		projection := mgl32.Perspective(45.0, float32(ratio), 0.1, 4096.0)
 
 		// Get their uniform location
 		viewLoc := gl.GetUniformLocation(programShader, gl.Str("view\x00"))
