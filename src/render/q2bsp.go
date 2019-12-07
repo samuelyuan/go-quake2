@@ -60,12 +60,13 @@ type TexInfo struct {
 }
 
 type MapData struct {
-	Vertices   []Vertex
-	Edges      []Edge
-	Faces      []Face
-	FaceEdges  []FaceEdge
-	TexInfos   []TexInfo
-	TextureIds map[string]int
+	Vertices     []Vertex
+	Edges        []Edge
+	Faces        []Face
+	FaceEdges    []FaceEdge
+	TexInfos     []TexInfo
+	TextureIds   map[string]int
+	LightmapData []uint8
 }
 
 // Read header to verify the file is valid
@@ -115,14 +116,20 @@ func LoadQ2BSP(r io.ReaderAt) (*MapData, error) {
 
 	textureIds := getTextureIds(texInfos)
 
+	lightmapData, err := loadLightmapData(header.Lumps[7], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load lightmap data")
+	}
+
 	// Combine into map data
 	mapData := &MapData{
-		Vertices:   vertices,
-		Edges:      edges,
-		Faces:      faces,
-		FaceEdges:  faceEdges,
-		TexInfos:   texInfos,
-		TextureIds: textureIds,
+		Vertices:     vertices,
+		Edges:        edges,
+		Faces:        faces,
+		FaceEdges:    faceEdges,
+		TexInfos:     texInfos,
+		TextureIds:   textureIds,
+		LightmapData: lightmapData,
 	}
 
 	return mapData, nil
@@ -233,6 +240,25 @@ func loadTexInfos(lump Lump, r io.ReaderAt) ([]TexInfo, error) {
 	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
 	for i := 0; i < num; i++ {
 		newItem := TexInfo{}
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+
+	return data, nil
+}
+
+func loadLightmapData(lump Lump, r io.ReaderAt) ([]uint8, error) {
+	num := int(lump.Length)
+
+	data := make([]uint8, num)
+
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < num; i++ {
+		newItem := uint8(0)
 		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
 			return nil, err
 		}

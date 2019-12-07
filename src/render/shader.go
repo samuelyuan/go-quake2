@@ -11,13 +11,16 @@ const (
 		#version 410
 	  layout (location = 0) in vec3 position;
 		layout (location = 1) in vec2 vertTexCoord;
+		layout (location = 2) in vec2 texCoord2;
 		out vec2 fragTexCoord;
+		out vec2 vertexLightmapCoord;
 
     uniform mat4 view;
 		uniform mat4 projection;
 
 		void main() {
 			fragTexCoord = vertTexCoord;
+			vertexLightmapCoord = texCoord2;
 
 			gl_Position = projection * view * vec4(position, 1.0);
 		}
@@ -27,12 +30,17 @@ const (
 		#version 410
 
 		uniform sampler2D diffuse;
+		uniform sampler2D lightmap;
+
 		in vec2 fragTexCoord;
+		in vec2 vertexLightmapCoord;
 		out vec4 fragColor;
 
 		void main() {
 			vec4 diffuseColor = texture2D(diffuse, fragTexCoord.st);
-			fragColor = diffuseColor;
+			vec4 lightColor = texture2D(lightmap, vertexLightmapCoord.st);
+
+			fragColor = vec4(diffuseColor.rgb * lightColor.rgb, diffuseColor.a);
 		}
 	` + "\x00"
 )

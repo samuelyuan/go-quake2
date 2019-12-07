@@ -56,7 +56,7 @@ func loadImage(walData WalHeader, r io.ReaderAt) ([]uint8, error) {
 	byteCount := walData.Width * walData.Height * 3
 	newImage := make([]uint8, byteCount)
 
-  reader := io.NewSectionReader(r, int64(unsafe.Sizeof(walData)), int64(byteCount))
+	reader := io.NewSectionReader(r, int64(unsafe.Sizeof(walData)), int64(byteCount))
 	for i := 0; i < int(byteCount); i += 3 {
 		paletteIndex := uint8(0)
 
@@ -67,9 +67,9 @@ func loadImage(walData WalHeader, r io.ReaderAt) ([]uint8, error) {
 		// add new color
 		rgbColor := palette[paletteIndex]
 		// each integer represents r, g, b respectively
-		newImage[i + 0] = rgbColor[0]
-		newImage[i + 1] = rgbColor[1]
-		newImage[i + 2] = rgbColor[2]
+		newImage[i+0] = rgbColor[0]
+		newImage[i+1] = rgbColor[1]
+		newImage[i+2] = rgbColor[2]
 	}
 
 	return newImage, nil
