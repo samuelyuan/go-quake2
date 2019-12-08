@@ -18,7 +18,6 @@ const (
 	windowWidth      = 800
 	windowHeight     = 600
 	MouseSensitivity = 0.9
-	PolygonSize      = 7
 )
 
 var (
@@ -32,7 +31,7 @@ var (
 
 type RenderMap struct {
 	MapTextures []MapTexture
-	MapLightmap MapLightmap
+	MapLightmap *MapLightmap
 }
 
 type MapTexture struct {
@@ -46,32 +45,6 @@ type MapTexture struct {
 type MapLightmap struct {
 	Texture uint32
 	Root    LightmapNode
-}
-
-type LightmapNode struct {
-	X      int32
-	Y      int32
-	Width  int32
-	Height int32
-	Nodes  []LightmapNode
-	Filled bool
-}
-
-type LightmapDimensions struct {
-	Width  int32
-	Height int32
-	MinU   float32
-	MinV   float32
-}
-
-type RenderTriangle struct {
-	X  float32
-	Y  float32
-	Z  float32
-	U  float32
-	V  float32
-	LU float32
-	LV float32
 }
 
 func GetViewMatrix() mgl32.Mat4 {
@@ -170,7 +143,7 @@ func drawMap(vertices []float32, renderMap RenderMap, programShader uint32) {
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*floatSize, gl.Ptr(vertices), gl.STATIC_DRAW)
 
 	// 3 floats for vertex, 2 floats for texture UV, 2 floats for lightmap UV
-	stride := int32(PolygonSize * floatSize)
+	stride := int32(TexturedVertexSize * floatSize)
 
 	// Position attribute
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, stride, gl.PtrOffset(0))
@@ -187,9 +160,9 @@ func drawMap(vertices []float32, renderMap RenderMap, programShader uint32) {
 	diffuseUniform := gl.GetUniformLocation(programShader, gl.Str("diffuse\x00"))
 	gl.Uniform1i(diffuseUniform, 0)
 
-	// Bind the lightmap texture
+	// Bind the lightmap texture shared by all the faces
 	gl.ActiveTexture(gl.TEXTURE1)
-	gl.BindTexture(gl.TEXTURE_2D, renderMap.MapLightmap.Texture)
+	gl.BindTexture(gl.TEXTURE_2D, (*renderMap.MapLightmap).Texture)
 	lightmapUniform := gl.GetUniformLocation(programShader, gl.Str("lightmap\x00"))
 	gl.Uniform1i(lightmapUniform, 1)
 
@@ -211,26 +184,6 @@ func drawMap(vertices []float32, renderMap RenderMap, programShader uint32) {
 	}
 
 	return
-}
-
-func getEdgeVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
-	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
-
-	// Edge index is positive
-	if edgeIdx >= 0 {
-		// Return first vertex as the start of the edge
-		return mapData.Vertices[mapData.Edges[edgeIdx].V1]
-	}
-
-	// Edge index is negative
-	// Return second vertex as the start of the edge
-	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
-}
-
-func getTextureUV(vtx render.Vertex, tex render.TexInfo) [2]float32 {
-	u := float32(vtx.X*tex.UAxis[0] + vtx.Y*tex.UAxis[1] + vtx.Z*tex.UAxis[2] + tex.UOffset)
-	v := float32(vtx.X*tex.VAxis[0] + vtx.Y*tex.VAxis[1] + vtx.Z*tex.VAxis[2] + tex.VOffset)
-	return [2]float32{u, v}
 }
 
 func getTextureFilename(texInfo render.TexInfo) string {
@@ -290,125 +243,80 @@ func createTextureList(textureIds map[string]int) []MapTexture {
 	return oldMapTextures
 }
 
-func createTriangleData(mapData *render.MapData, mapTextures []MapTexture) ([]float32, RenderMap) {
-	vertsByTexture := make(map[int][]RenderTriangle)
+func createRenderingData(mapData *render.MapData, mapTextures []MapTexture) ([]float32, RenderMap) {
+	vertsByTexture := make(map[int][]Surface)
 
-	lightmap := initializeLightmap()
+	lightmap := NewLightmap()
 
 	var offset uint16
 	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
 		faceInfo := mapData.Faces[faceIdx]
 		texInfo := mapData.TexInfos[faceInfo.TextureInfo]
 
-		// hide skybox
+		// Hide skybox
 		if texInfo.Flags&4 != 0 {
 			continue
 		}
 
-		// get index in texture array
+		// Get index in texture array
 		filename := getTextureFilename(texInfo)
 		texId := mapData.TextureIds[filename]
+		mapTexture := mapTextures[texId]
 
 		_, ok := vertsByTexture[texId]
 		if !ok {
-			vertsByTexture[texId] = make([]RenderTriangle, 0)
+			vertsByTexture[texId] = make([]Surface, 0)
 		}
 
+		// Generate triangle fan from map face
+		var faceVertices []render.Vertex
+		// Fix the first vertex
 		v0 := getEdgeVertex(mapData, int(faceInfo.FirstEdge))
-		uv0 := getTextureUV(v0, texInfo)
 		v1 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+1)
-		uv1 := getTextureUV(v1, texInfo)
 
-		// Generate triangle fan from polyglon
-		var faceData []RenderTriangle
 		for offset = 2; offset < faceInfo.NumEdges; offset++ {
 			v2 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+int(offset))
-			uv2 := getTextureUV(v2, texInfo)
 
 			// Add triangle
-			faceData = append(faceData, RenderTriangle{v0.X, v0.Y, v0.Z, uv0[0], uv0[1], 0.999, 0.999})
-			faceData = append(faceData, RenderTriangle{v1.X, v1.Y, v1.Z, uv1[0], uv1[1], 0.999, 0.999})
-			faceData = append(faceData, RenderTriangle{v2.X, v2.Y, v2.Z, uv2[0], uv2[1], 0.999, 0.999})
+			faceVertices = append(faceVertices, v0, v1, v2)
 
+			// Move to the next triangle
 			v1 = v2
-			uv1 = uv2
 		}
 
-		if texInfo.Flags == 0 {
-			processLightmap(&lightmap, faceData, texInfo, faceInfo.LightmapOffset, mapData)
-		}
+		surface := NewSurface(faceVertices, texInfo, mapTexture.Width, mapTexture.Height, lightmap, faceInfo.LightmapOffset, mapData)
 
-		// add all triangle data for this texture
-		for j := 0; j < len(faceData); j++ {
-			vertsByTexture[texId] = append(vertsByTexture[texId], faceData[j])
-		}
+		// Add all triangle data for this texture
+		vertsByTexture[texId] = append(vertsByTexture[texId], *surface)
 	}
 
 	// Generate mipmaps for the lightmap
 	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 
-	// only get the textures that were used in the map
-	var texKeys []int
-	for k, _ := range vertsByTexture {
-		texKeys = append(texKeys, k)
-	}
-	sort.Ints(texKeys)
-
-	// allocate a buffer
-	bufferSize := 0
-	for i := 0; i < len(texKeys); i++ {
-		bufferSize += int(len(vertsByTexture[texKeys[i]])) * PolygonSize
-	}
-
-	// rearrange data by texture
-	copyMapTextures := mapTextures[:]
-	fullBuffer := make([]float32, bufferSize)
-	bufferOffset := 0
-	for i := 0; i < len(texKeys); i++ {
-		texVertSize := int32(len(vertsByTexture[texKeys[i]]))
-		copyMapTextures[texKeys[i]].VertOffset = int32(bufferOffset / PolygonSize)
-		copyMapTextures[texKeys[i]].VertCount = texVertSize
-
-		for j := 0; j < int(texVertSize); j++ {
-			arr := vertsByTexture[texKeys[i]]
-			x := arr[j].X
-			y := arr[j].Y
-			z := arr[j].Z
-
-			textureWidth := float32(copyMapTextures[texKeys[i]].Width)
-			textureHeight := float32(copyMapTextures[texKeys[i]].Height)
-			u := arr[j].U / textureWidth
-			v := arr[j].V / textureHeight
-
-			lu := arr[j].LU
-			lv := arr[j].LV
-
-			// Position
-			fullBuffer[bufferOffset+0] = x
-			fullBuffer[bufferOffset+1] = y
-			fullBuffer[bufferOffset+2] = z
-
-			// Texture UV
-			fullBuffer[bufferOffset+3] = u
-			fullBuffer[bufferOffset+4] = v
-
-			// Lightmap UV
-			fullBuffer[bufferOffset+5] = lu
-			fullBuffer[bufferOffset+6] = lv
-
-			bufferOffset += PolygonSize
-		}
-	}
-
+	polygonBuffer := NewPolygonBuffer(vertsByTexture, mapTextures)
 	renderMap := RenderMap{
 		MapLightmap: lightmap,
-		MapTextures: copyMapTextures,
+		MapTextures: polygonBuffer.MapTextures,
 	}
-	return fullBuffer, renderMap
+	return polygonBuffer.Buffer, renderMap
 }
 
-func initializeLightmap() MapLightmap {
+func getEdgeVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
+	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
+
+	// Edge index is positive
+	if edgeIdx >= 0 {
+		// Return first vertex as the start of the edge
+		return mapData.Vertices[mapData.Edges[edgeIdx].V1]
+	}
+
+	// Edge index is negative
+	// Return second vertex as the start of the edge
+	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
+}
+
+func NewLightmap() *MapLightmap {
 	var texture uint32
 	gl.GenTextures(1, &texture)
 	gl.BindTexture(gl.TEXTURE_2D, texture)
@@ -421,7 +329,7 @@ func initializeLightmap() MapLightmap {
 	gl.TexSubImage2D(gl.TEXTURE_2D, 0, lightmapSize-1, lightmapSize-1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(whitePixel))
 
 	// Setup BSP tree here
-	return MapLightmap{
+	return &MapLightmap{
 		Texture: texture,
 		Root: LightmapNode{
 			X:      0,
@@ -432,176 +340,6 @@ func initializeLightmap() MapLightmap {
 			Filled: false,
 		},
 	}
-}
-
-func processLightmap(lightmap *MapLightmap, faceData []RenderTriangle, texInfo render.TexInfo, offset uint32, mapData *render.MapData) {
-	size := getLightmapDimensions(faceData)
-
-	rect := readLightmap(lightmap, offset, size.Width, size.Height, mapData)
-	if rect != nil {
-		// Determine the correct TexCoords for the lightmap
-		for i := 0; i < len(faceData); i++ {
-			x := faceData[i].X
-			y := faceData[i].Y
-			z := faceData[i].Z
-
-			s := ((x*texInfo.UAxis[0] + y*texInfo.UAxis[1] + z*texInfo.UAxis[2]) + texInfo.UOffset) - size.MinU
-			s += float32((rect.X * 16) + 8)
-			s /= float32(lightmapSize * 16)
-
-			t := ((x*texInfo.VAxis[0] + y*texInfo.VAxis[1] + z*texInfo.VAxis[2]) + texInfo.VOffset) - size.MinV
-			t += float32((rect.Y * 16) + 8)
-			t /= float32(lightmapSize * 16)
-
-			faceData[i].LU = s
-			faceData[i].LV = t
-		}
-	}
-}
-
-// Get the width and height of the lightmap
-func getLightmapDimensions(faceData []RenderTriangle) LightmapDimensions {
-	// Find the Min and Max UV's for a face
-	startUV0 := float64(faceData[0].U)
-	startUV1 := float64(faceData[0].V)
-	minU := math.Floor(startUV0)
-	minV := math.Floor(startUV1)
-	maxU := math.Floor(startUV0)
-	maxV := math.Floor(startUV1)
-
-	for i := 1; i < len(faceData); i++ {
-		uv0 := float64(faceData[i].U)
-		uv1 := float64(faceData[i].V)
-
-		if math.Floor(uv0) < minU {
-			minU = math.Floor(uv0)
-		}
-		if math.Floor(uv1) < minV {
-			minV = math.Floor(uv1)
-		}
-		if math.Floor(uv0) > maxU {
-			maxU = math.Floor(uv0)
-		}
-		if math.Floor(uv1) > maxV {
-			maxV = math.Floor(uv1)
-		}
-	}
-
-	// Calculate the lightmap dimensions
-	return LightmapDimensions{
-		Width:  int32(math.Ceil(maxU/16) - math.Floor(minU/16) + 1),
-		Height: int32(math.Ceil(maxV/16) - math.Floor(minV/16) + 1),
-		MinU:   float32(math.Floor(minU)),
-		MinV:   float32(math.Floor(minV)),
-	}
-}
-
-func readLightmap(lightmap *MapLightmap, offset uint32, width int32, height int32, mapData *render.MapData) *LightmapNode {
-	if height <= 0 || width <= 0 {
-		return nil
-	}
-
-	// Navigate lightmap BSP to find correctly sized space
-	node := allocateLightmapRect(&lightmap.Root, width, height)
-	if node != nil {
-		// Each pixel has 4 values for RGBA
-		byteCount := width * height * 4
-		bytes := make([]uint8, byteCount)
-		curByte := 0
-
-		baseIndex := int(offset)
-		for i := 0; i < int(width*height); i++ {
-			r := mapData.LightmapData[baseIndex+0]
-			g := mapData.LightmapData[baseIndex+1]
-			b := mapData.LightmapData[baseIndex+2]
-
-			bytes[curByte+0] = r
-			bytes[curByte+1] = g
-			bytes[curByte+2] = b
-			bytes[curByte+3] = 255
-			curByte += 4
-
-			// read only 3 components
-			baseIndex += 3
-		}
-
-		// Copy the lightmap into the allocated rectangle
-		gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
-		gl.TexSubImage2D(gl.TEXTURE_2D, 0, node.X, node.Y, width, height, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(bytes))
-	}
-	return node
-}
-
-// Navigate the Lightmap BSP tree and find an empty spot of the right size
-func allocateLightmapRect(node *LightmapNode, width int32, height int32) *LightmapNode {
-	// Check child nodes if they exist
-	if len(node.Nodes) > 0 {
-		newNode := allocateLightmapRect(&node.Nodes[0], width, height)
-		if newNode != nil {
-			return newNode
-		}
-		return allocateLightmapRect(&node.Nodes[1], width, height)
-	}
-
-	// Already used
-	if node.Filled {
-		return nil
-	}
-
-	// Too small
-	if node.Width < width || node.Height < height {
-		return nil
-	}
-
-	// Allocate if it is a perfect fit
-	if node.Width == width && node.Height == height {
-		node.Filled = true
-		return node
-	}
-
-	// Split by width or height
-	var nodes []LightmapNode
-	if (node.Width - width) > (node.Height - height) {
-		nodes = []LightmapNode{
-			LightmapNode{
-				X:      node.X,
-				Y:      node.Y,
-				Width:  width,
-				Height: node.Height,
-				Nodes:  []LightmapNode{},
-				Filled: false,
-			},
-			LightmapNode{
-				X:      node.X + width,
-				Y:      node.Y,
-				Width:  node.Width - width,
-				Height: node.Height,
-				Nodes:  []LightmapNode{},
-				Filled: false,
-			},
-		}
-	} else {
-		nodes = []LightmapNode{
-			LightmapNode{
-				X:      node.X,
-				Y:      node.Y,
-				Width:  node.Width,
-				Height: height,
-				Nodes:  []LightmapNode{},
-				Filled: false,
-			},
-			LightmapNode{
-				X:      node.X,
-				Y:      node.Y + height,
-				Width:  node.Width,
-				Height: node.Height - height,
-				Nodes:  []LightmapNode{},
-				Filled: false,
-			},
-		}
-	}
-	node.Nodes = nodes
-	return allocateLightmapRect(&node.Nodes[0], width, height)
 }
 
 func initMesh(bspFilename string) (*render.MapData, []MapTexture, error) {
@@ -618,7 +356,7 @@ func initMesh(bspFilename string) (*render.MapData, []MapTexture, error) {
 		log.Fatal("Error loading bsp in main:", err)
 		return nil, nil, err
 	}
-	fmt.Println("Map data successfully loaded")
+	fmt.Println("BSP map successfully loaded")
 
 	oldMapTextures := createTextureList(mapData.TextureIds)
 	if oldMapTextures == nil {
@@ -659,7 +397,7 @@ func main() {
 		return
 	}
 
-	triangleData, renderMap := createTriangleData(mapData, oldMapTextures)
+	vertexBuffer, renderMap := createRenderingData(mapData, oldMapTextures)
 	fmt.Println("Rendering data is generated. Begin rendering.")
 
 	for !windowHandler.shouldClose() {
@@ -684,7 +422,7 @@ func main() {
 		gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
 
 		// Render map data to the screen
-		drawMap(triangleData, renderMap, programShader)
+		drawMap(vertexBuffer, renderMap, programShader)
 
 		checkInput()
 	}
