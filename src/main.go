@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
-	"github.com/go-gl/mathgl/mgl32"
 	"io"
 	"log"
-	"math"
 	"os"
 	"runtime"
 	"sort"
@@ -16,16 +14,12 @@ import (
 )
 
 const (
-	windowWidth      = 800
-	windowHeight     = 600
-	MouseSensitivity = 0.9
+	windowWidth  = 800
+	windowHeight = 600
 )
 
 var (
-	xAngle         = float32(0)
-	zAngle         = float32(3)
-	cameraPosition = mgl32.Vec3{-1024, -512, -512}
-	lightmapSize   = int32(512)
+	lightmapSize = int32(512)
 
 	windowHandler *WindowHandler
 )
@@ -46,57 +40,6 @@ type MapTexture struct {
 type MapLightmap struct {
 	Texture uint32
 	Root    LightmapNode
-}
-
-func GetViewMatrix() mgl32.Mat4 {
-	matrix := mgl32.Ident4()
-	matrix = matrix.Mul4(mgl32.HomogRotate3DX(xAngle - mgl32.DegToRad(90)))
-	matrix = matrix.Mul4(mgl32.HomogRotate3DZ(zAngle))
-	matrix = matrix.Mul4(mgl32.Translate3D(cameraPosition.X(), cameraPosition.Y(), cameraPosition.Z()))
-	return matrix
-}
-
-func checkInput() {
-	// Move the camera around using WASD keys
-	speed := float32(200 * windowHandler.getTimeSinceLastFrame())
-	dir := []float32{0, 0, 0}
-	if windowHandler.inputHandler.isActive(PLAYER_FORWARD) {
-		dir[2] += speed
-	} else if windowHandler.inputHandler.isActive(PLAYER_BACKWARD) {
-		dir[2] -= speed
-	} else if windowHandler.inputHandler.isActive(PLAYER_LEFT) {
-		dir[0] += speed
-	} else if windowHandler.inputHandler.isActive(PLAYER_RIGHT) {
-		dir[0] -= speed
-	}
-
-	cameraMatrix := mgl32.Ident4()
-	cameraMatrix = cameraMatrix.Mul4(mgl32.HomogRotate3DX(xAngle - mgl32.DegToRad(90)))
-	cameraMatrix = cameraMatrix.Mul4(mgl32.HomogRotate3DZ(zAngle))
-	cameraMatrix = cameraMatrix.Inv()
-	movementDelta := cameraMatrix.Mul4x1(mgl32.Vec4{dir[0], dir[1], dir[2], 0.0})
-
-	cameraPosition = cameraPosition.Add(mgl32.Vec3{movementDelta.X(), movementDelta.Y(), movementDelta.Z()})
-
-	offset := windowHandler.inputHandler.getCursorChange()
-	xOffset := float32(offset[0] * MouseSensitivity)
-	yOffset := float32(offset[1] * MouseSensitivity)
-
-	zAngle += xOffset * 0.025
-	for zAngle < 0 {
-		zAngle += math.Pi * 2
-	}
-	for zAngle >= math.Pi*2 {
-		zAngle -= math.Pi * 2
-	}
-
-	xAngle += yOffset * 0.025
-	for xAngle < -math.Pi*0.5 {
-		xAngle = -math.Pi * 0.5
-	}
-	for xAngle > math.Pi*0.5 {
-		xAngle = math.Pi * 0.5
-	}
 }
 
 func initOpenGL() uint32 {
@@ -335,7 +278,7 @@ func NewLightmap() *MapLightmap {
 }
 
 func initMesh(pakFilename string, bspFilename string) (*q2file.MapData, []MapTexture, error) {
-  pakFile, err := os.Open(pakFilename)
+	pakFile, err := os.Open(pakFilename)
 	defer pakFile.Close()
 
 	if err != nil {
@@ -343,7 +286,7 @@ func initMesh(pakFilename string, bspFilename string) (*q2file.MapData, []MapTex
 		return nil, nil, err
 	}
 
-  pakFileMap, err := q2file.LoadQ2PAK(pakFile)
+	pakFileMap, err := q2file.LoadQ2PAK(pakFile)
 
 	mapData, err := q2file.LoadQ2BSPFromPAK(pakFile, pakFileMap, bspFilename)
 	if err != nil {
@@ -394,6 +337,7 @@ func main() {
 	vertexBuffer, renderMap := createRenderingData(mapData, oldMapTextures)
 	fmt.Println("Rendering data is generated. Begin rendering.")
 
+	camera := NewCamera(windowHandler)
 	for !windowHandler.shouldClose() {
 		windowHandler.startFrame()
 
@@ -403,9 +347,8 @@ func main() {
 		gl.UseProgram(programShader)
 
 		// Create transformations
-		view := GetViewMatrix()
-		ratio := float64(windowWidth) / float64(windowHeight)
-		projection := mgl32.Perspective(45.0, float32(ratio), 0.1, 4096.0)
+		view := camera.GetViewMatrix()
+		projection := camera.GetPerspectiveMatrix()
 
 		// Get their uniform location
 		viewLoc := gl.GetUniformLocation(programShader, gl.Str("view\x00"))
@@ -418,6 +361,6 @@ func main() {
 		// Render map data to the screen
 		drawMap(vertexBuffer, renderMap, programShader)
 
-		checkInput()
+		camera.UpdateViewMatrix()
 	}
 }
