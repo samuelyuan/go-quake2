@@ -1,14 +1,14 @@
 package main
 
 import (
-	"./render"
+	"./q2file"
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"math"
 )
 
 // Contains all the triangles of a face to be passed to the renderer
 type Surface struct {
-	TexInfo          render.TexInfo
+	TexInfo          q2file.TexInfo
 	TexturedVertices []TexturedVertex
 }
 
@@ -44,13 +44,13 @@ type LightmapDimensions struct {
 }
 
 func NewSurface(
-	faceVertices []render.Vertex,
-	texInfo render.TexInfo,
+	faceVertices []q2file.Vertex,
+	texInfo q2file.TexInfo,
 	textureWidth uint32,
 	textureHeight uint32,
 	lightmap *MapLightmap, // Update lightmap for this face
 	faceLightmapOffset uint32,
-	mapData *render.MapData,
+	mapData *q2file.MapData,
 ) *Surface {
 	surface := &Surface{}
 	surface.TexInfo = texInfo
@@ -103,7 +103,7 @@ func NewSurface(
 }
 
 // Get the width and height of the lightmap
-func getLightmapDimensions(faceVertices []render.Vertex, texInfo render.TexInfo) LightmapDimensions {
+func getLightmapDimensions(faceVertices []q2file.Vertex, texInfo q2file.TexInfo) LightmapDimensions {
 	startUV := getTextureUV(faceVertices[0], texInfo)
 
 	// Find the Min and Max UV's for a face
@@ -142,7 +142,7 @@ func getLightmapDimensions(faceVertices []render.Vertex, texInfo render.TexInfo)
 	}
 }
 
-func readLightmap(lightmap *MapLightmap, offset uint32, width int32, height int32, mapData *render.MapData) *LightmapNode {
+func readLightmap(lightmap *MapLightmap, offset uint32, width int32, height int32, mapData *q2file.MapData) *LightmapNode {
 	if height <= 0 || width <= 0 {
 		return nil
 	}
@@ -269,7 +269,7 @@ func allocateLightmapRect(node *LightmapNode, width int32, height int32) *Lightm
 	return allocateLightmapRect(&node.Nodes[0], width, height)
 }
 
-func getTextureUV(vtx render.Vertex, tex render.TexInfo) [2]float32 {
+func getTextureUV(vtx q2file.Vertex, tex q2file.TexInfo) [2]float32 {
 	u := float32(vtx.X*tex.UAxis[0] + vtx.Y*tex.UAxis[1] + vtx.Z*tex.UAxis[2] + tex.UOffset)
 	v := float32(vtx.X*tex.VAxis[0] + vtx.Y*tex.VAxis[1] + vtx.Z*tex.VAxis[2] + tex.VOffset)
 	return [2]float32{u, v}

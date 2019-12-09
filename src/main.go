@@ -1,11 +1,12 @@
 package main
 
 import (
-	"./render"
+	"./q2file"
 	"fmt"
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
 	"github.com/go-gl/mathgl/mgl32"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -106,12 +107,12 @@ func initOpenGL() uint32 {
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	fmt.Println("OpenGL version", version)
 
-	shader := render.NewShader()
+	shader := q2file.NewShader()
 	return shader.ProgramShader
 }
 
 // Initialize texture in OpenGL using image data
-func buildTexture(imageData []uint8, walData render.WalHeader) uint32 {
+func buildTexture(imageData []uint8, walData q2file.WalHeader) uint32 {
 	var texId uint32
 	gl.GenTextures(1, &texId)
 	gl.BindTexture(gl.TEXTURE_2D, texId)
@@ -186,7 +187,7 @@ func drawMap(vertices []float32, renderMap RenderMap, programShader uint32) {
 	return
 }
 
-func getTextureFilename(texInfo render.TexInfo) string {
+func getTextureFilename(texInfo q2file.TexInfo) string {
 	// convert filename byte array to string
 	filename := ""
 	for i := 0; i < len(texInfo.TextureName); i++ {
@@ -199,7 +200,7 @@ func getTextureFilename(texInfo render.TexInfo) string {
 	return filename
 }
 
-func createTextureList(textureIds map[string]int) []MapTexture {
+func createTextureList(pakReader io.ReaderAt, pakFileMap map[string]q2file.PakFile, textureIds map[string]int) []MapTexture {
 	// get sorted strings
 	var fileKeys []string
 	for texFilename, _ := range textureIds {
@@ -212,17 +213,8 @@ func createTextureList(textureIds map[string]int) []MapTexture {
 	for i := 0; i < len(fileKeys); i++ {
 		// stored in different folder
 		// append extension (.wal) as default
-		fullFilename := "./data/textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
-
-		texFile, _ := os.Open(fullFilename)
-		defer texFile.Close()
-
-		if texFile == nil {
-			log.Fatal("Texture file doesn't exist")
-			return nil
-		}
-
-		imageData, walData, err := render.LoadQ2WAL(texFile)
+		fullFilename := "textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
+		imageData, walData, err := q2file.LoadQ2WALFromPAK(pakReader, pakFileMap, fullFilename)
 		if err != nil {
 			log.Fatal("Error loading texture in main:", err)
 			return nil
@@ -243,7 +235,7 @@ func createTextureList(textureIds map[string]int) []MapTexture {
 	return oldMapTextures
 }
 
-func createRenderingData(mapData *render.MapData, mapTextures []MapTexture) ([]float32, RenderMap) {
+func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture) ([]float32, RenderMap) {
 	vertsByTexture := make(map[int][]Surface)
 
 	lightmap := NewLightmap()
@@ -269,7 +261,7 @@ func createRenderingData(mapData *render.MapData, mapTextures []MapTexture) ([]f
 		}
 
 		// Generate triangle fan from map face
-		var faceVertices []render.Vertex
+		var faceVertices []q2file.Vertex
 		// Fix the first vertex
 		v0 := getEdgeVertex(mapData, int(faceInfo.FirstEdge))
 		v1 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+1)
@@ -302,7 +294,7 @@ func createRenderingData(mapData *render.MapData, mapTextures []MapTexture) ([]f
 	return polygonBuffer.Buffer, renderMap
 }
 
-func getEdgeVertex(mapData *render.MapData, faceEdgeIdx int) render.Vertex {
+func getEdgeVertex(mapData *q2file.MapData, faceEdgeIdx int) q2file.Vertex {
 	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
 
 	// Edge index is positive
@@ -342,23 +334,25 @@ func NewLightmap() *MapLightmap {
 	}
 }
 
-func initMesh(bspFilename string) (*render.MapData, []MapTexture, error) {
-	file, err := os.Open(bspFilename)
-	defer file.Close()
+func initMesh(pakFilename string, bspFilename string) (*q2file.MapData, []MapTexture, error) {
+  pakFile, err := os.Open(pakFilename)
+	defer pakFile.Close()
 
-	if file == nil {
-		log.Fatal("BSP file doesn't exist")
+	if err != nil {
+		log.Fatal("PAK file doesn't exist")
 		return nil, nil, err
 	}
 
-	mapData, err := render.LoadQ2BSP(file)
+  pakFileMap, err := q2file.LoadQ2PAK(pakFile)
+
+	mapData, err := q2file.LoadQ2BSPFromPAK(pakFile, pakFileMap, bspFilename)
 	if err != nil {
 		log.Fatal("Error loading bsp in main:", err)
 		return nil, nil, err
 	}
 	fmt.Println("BSP map successfully loaded")
 
-	oldMapTextures := createTextureList(mapData.TextureIds)
+	oldMapTextures := createTextureList(pakFile, pakFileMap, mapData.TextureIds)
 	if oldMapTextures == nil {
 		return nil, nil, fmt.Errorf("Error loading textures")
 	}
@@ -391,7 +385,7 @@ func main() {
 	gl.CullFace(gl.FRONT)
 
 	// Load files
-	mapData, oldMapTextures, err := initMesh("./data/test.bsp")
+	mapData, oldMapTextures, err := initMesh("./data/pak0.pak", "maps/demo1.bsp")
 	if err != nil {
 		fmt.Println("Error initializing mesh: ", err)
 		return
