@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	MouseSensitivity = 0.9
+	MouseSensitivity = 0.7
 )
 
 type Camera struct {
@@ -20,7 +20,7 @@ func NewCamera(windowHandler *WindowHandler) *Camera {
 	return &Camera{
 		xAngle:         float32(0),
 		zAngle:         float32(3),
-		cameraPosition: mgl32.Vec3{-1024, -512, -512},
+		cameraPosition: mgl32.Vec3{-50, 256, -50},
 		windowHandler:  windowHandler,
 	}
 }
@@ -79,4 +79,9 @@ func (c *Camera) UpdateViewMatrix() {
 	for c.xAngle > math.Pi*0.5 {
 		c.xAngle = math.Pi * 0.5
 	}
+}
+
+func (c *Camera) GetCameraPosition() [3]float32 {
+	position := c.cameraPosition
+	return [3]float32{-position.X(), -position.Y(), -position.Z()}
 }

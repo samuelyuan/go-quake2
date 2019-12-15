@@ -71,7 +71,7 @@ func NewSurface(
 
 		texturedVertex.LightU = 0.999
 		texturedVertex.LightV = 0.999
-		surface.TexturedVertices = append(surface.TexturedVertices, texturedVertex)
+		surface.TexturedVertices[i] = texturedVertex
 	}
 
 	// Check if face has a lightmap

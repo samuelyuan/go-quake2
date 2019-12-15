@@ -41,7 +41,7 @@ func LoadQ2PAK(r io.ReaderAt) (map[string]PakFile, error) {
 	// Each PakFile is 64 bytes
 	count := int(pakHeader.Length) / 64
 
-	fmt.Println("PAK file contains ", count, " files")
+	fmt.Println("PAK file contains", count, "files")
 	for i := 0; i < count; i++ {
 		pakFile := PakFile{}
 		if err := binary.Read(fileReader, binary.LittleEndian, &pakFile); err != nil {

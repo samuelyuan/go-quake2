@@ -20,6 +20,7 @@ const (
 
 var (
 	lightmapSize = int32(512)
+	SurfaceSky   = uint32(4)
 
 	windowHandler *WindowHandler
 )
@@ -157,12 +158,20 @@ func createTextureList(pakReader io.ReaderAt, pakFileMap map[string]q2file.PakFi
 		// stored in different folder
 		// append extension (.wal) as default
 		fullFilename := "textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
+		fullFilename = strings.ToLower(fullFilename)
 		imageData, walData, err := q2file.LoadQ2WALFromPAK(pakReader, pakFileMap, fullFilename)
 		if err != nil {
-			log.Fatal("Error loading texture in main:", err)
-			return nil
-		}
+			fmt.Println("Warning: texture", fullFilename, "is missing.")
+			index := textureIds[fileKeys[i]]
+			oldMapTextures[index] = MapTexture{}
+			oldMapTextures[index].Width = 0
+			oldMapTextures[index].Height = 0
+			oldMapTextures[index].Id = 0
+			continue
 
+			// log.Fatal("Error loading texture in main:", err)
+			// return nil
+		}
 		// Initialize texture
 		texId := buildTexture(imageData, walData)
 
@@ -178,18 +187,19 @@ func createTextureList(pakReader io.ReaderAt, pakFileMap map[string]q2file.PakFi
 	return oldMapTextures
 }
 
-func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture) ([]float32, RenderMap) {
+func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, faceIds []int) ([]float32, RenderMap) {
 	vertsByTexture := make(map[int][]Surface)
 
 	lightmap := NewLightmap()
 
 	var offset uint16
-	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
-		faceInfo := mapData.Faces[faceIdx]
+	allSurfaces := make([]Surface, 0)
+	for _, faceId := range faceIds {
+		faceInfo := mapData.Faces[faceId]
 		texInfo := mapData.TexInfos[faceInfo.TextureInfo]
 
 		// Hide skybox
-		if texInfo.Flags&4 != 0 {
+		if texInfo.Flags&SurfaceSky != 0 {
 			continue
 		}
 
@@ -223,6 +233,7 @@ func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture) ([]f
 
 		// Add all triangle data for this texture
 		vertsByTexture[texId] = append(vertsByTexture[texId], *surface)
+		allSurfaces = append(allSurfaces, *surface)
 	}
 
 	// Generate mipmaps for the lightmap
@@ -316,9 +327,7 @@ func main() {
 	programShader := initOpenGL()
 
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
-	gl.ClearDepth(1.0)
 	gl.Enable(gl.DEPTH_TEST)
-	gl.DepthFunc(gl.LEQUAL)
 
 	// Set appropriate blending mode
 	gl.Enable(gl.BLEND)
@@ -334,10 +343,18 @@ func main() {
 		return
 	}
 
-	vertexBuffer, renderMap := createRenderingData(mapData, oldMapTextures)
+	bspTree := NewBSPTree(mapData)
+	fmt.Println("BSP Tree built")
+	allFaceIds := make([]int, len(mapData.Faces))
+	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
+		allFaceIds[faceIdx] = faceIdx
+	}
+	vertexBuffer, renderMap := createRenderingData(mapData, oldMapTextures, allFaceIds)
 	fmt.Println("Rendering data is generated. Begin rendering.")
 
 	camera := NewCamera(windowHandler)
+	prevLeaf := -1
+	curLeaf := 0
 	for !windowHandler.shouldClose() {
 		windowHandler.startFrame()
 
@@ -359,6 +376,16 @@ func main() {
 		gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
 
 		// Render map data to the screen
+		// Figure out which leaf the player is in and only render faces in that leaf
+		leaf := bspTree.findLeafNode(0, mapData, camera.GetCameraPosition())
+		curLeaf = leaf.LeafIndex
+		// Update the polygons if the player is in a different leaf
+		if prevLeaf != curLeaf {
+			if len(leaf.Faces) > 0 {
+				vertexBuffer, renderMap = createRenderingData(mapData, oldMapTextures, leaf.Faces)
+			}
+			prevLeaf = curLeaf
+		}
 		drawMap(vertexBuffer, renderMap, programShader)
 
 		camera.UpdateViewMatrix()

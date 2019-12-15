@@ -8,6 +8,20 @@ import (
 	"unsafe"
 )
 
+const (
+	LumpPlanes     = 1
+	LumpVertices   = 2
+	LumpVisibility = 3
+	LumpBSPNodes   = 4
+	LumpTexInfos   = 5
+	LumpFaces      = 6
+	LumpLightmaps  = 7
+	LumpBSPLeaves  = 8
+	LumpLeafFaces  = 9
+	LumpEdges      = 11
+	LumpFaceEdges  = 12
+)
+
 type Header struct {
 	Magic   [4]byte  // magic number ("IBSP")
 	Version uint32   // version of the BSP format (38)
@@ -59,14 +73,62 @@ type TexInfo struct {
 	NextTexInfo int32
 }
 
+type BSPNode struct {
+	Plane uint32 // index of the splitting plane (in the plane array)
+
+	FrontChild int32 // index of the front child node or leaf
+	BackChild  int32 // index of the back child node or leaf
+
+	BBoxMin [3]int16 // minimum x, y and z of the bounding box
+	BBoxMax [3]int16 // maximum x, y and z of the bounding box
+
+	FirstFace uint16 // index of the first face (in the face array)
+	NumFaces  uint16 // number of consecutive edges (in the face array)
+}
+
+type Plane struct {
+	Normal   [3]float32 // A, B, C components of the plane equation
+	Distance float32    // D component of the plane equation
+	Type     uint32
+}
+
+type BSPLeaf struct {
+	BrushOr uint32
+
+	Cluster uint16 // -1 for cluster indicates no visibility information
+	Area    uint16
+
+	BBoxMin [3]int16 // bounding box minimums
+	BBoxMax [3]int16 // bounding box maximums
+
+	FirstLeafFace uint16 // index of the first face (in the face leaf array)
+	NumLeafFaces  uint16 // number of consecutive edges (in the face leaf array)
+
+	FirstLeafBrush uint16
+	NumLeafBrushes uint16
+}
+
+type LeafFace int16
+
+type VisibilityOffset struct {
+	Pvs uint32 // visibility set offset
+	Phs uint32 // hearability set offset
+}
+
 type MapData struct {
-	Vertices     []Vertex
-	Edges        []Edge
-	Faces        []Face
-	FaceEdges    []FaceEdge
-	TexInfos     []TexInfo
-	TextureIds   map[string]int
-	LightmapData []uint8
+	Vertices          []Vertex
+	Edges             []Edge
+	Faces             []Face
+	FaceEdges         []FaceEdge
+	TexInfos          []TexInfo
+	TextureIds        map[string]int
+	LightmapData      []uint8
+	Nodes             []BSPNode
+	Planes            []Plane
+	BSPLeaves         []BSPLeaf
+	LeafFaces         []LeafFace
+	VisibilityData    []uint8
+	VisibilityOffsets []VisibilityOffset
 }
 
 // Read header to verify the file is valid
@@ -93,43 +155,74 @@ func LoadQ2BSP(r io.ReaderAt) (*MapData, error) {
 	// Load map data
 	fmt.Println("Header total lumps:", len(header.Lumps))
 
-	vertices, err := loadVertices(header.Lumps[2], r)
+	vertices, err := loadVertices(header.Lumps[LumpVertices], r)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load vertices")
 	}
-	edges, err := loadEdges(header.Lumps[11], r)
+	edges, err := loadEdges(header.Lumps[LumpEdges], r)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load edges")
 	}
-	faces, err := loadFaces(header.Lumps[6], r)
+	faces, err := loadFaces(header.Lumps[LumpFaces], r)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load faces")
 	}
-	faceEdges, err := loadFaceEdges(header.Lumps[12], r)
+	faceEdges, err := loadFaceEdges(header.Lumps[LumpFaceEdges], r)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load face edges")
 	}
-	texInfos, err := loadTexInfos(header.Lumps[5], r)
+	texInfos, err := loadTexInfos(header.Lumps[LumpTexInfos], r)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load texture info")
 	}
 
 	textureIds := getTextureIds(texInfos)
 
-	lightmapData, err := loadLightmapData(header.Lumps[7], r)
+	lightmapData, err := loadLightmapData(header.Lumps[LumpLightmaps], r)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load lightmap data")
 	}
 
+	bspNodes, err := loadBSPNodes(header.Lumps[LumpBSPNodes], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load BSP nodes")
+	}
+	planes, err := loadPlanes(header.Lumps[LumpPlanes], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load BSP planes")
+	}
+	bspLeaves, err := loadBSPLeaves(header.Lumps[LumpBSPLeaves], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load BSP leaves")
+	}
+	leafFaces, err := loadLeafFaces(header.Lumps[LumpLeafFaces], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load leaf faces")
+	}
+	visibilityData, err := loadVisibilityData(header.Lumps[LumpVisibility], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load visibility data")
+	}
+	visibilityOffsets, err := loadVisibilityOffsets(header.Lumps[LumpVisibility], r)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load visibility offsets")
+	}
+
 	// Combine into map data
 	mapData := &MapData{
-		Vertices:     vertices,
-		Edges:        edges,
-		Faces:        faces,
-		FaceEdges:    faceEdges,
-		TexInfos:     texInfos,
-		TextureIds:   textureIds,
-		LightmapData: lightmapData,
+		Vertices:          vertices,
+		Edges:             edges,
+		Faces:             faces,
+		FaceEdges:         faceEdges,
+		TexInfos:          texInfos,
+		TextureIds:        textureIds,
+		LightmapData:      lightmapData,
+		Nodes:             bspNodes,
+		Planes:            planes,
+		BSPLeaves:         bspLeaves,
+		LeafFaces:         leafFaces,
+		VisibilityData:    visibilityData,
+		VisibilityOffsets: visibilityOffsets,
 	}
 
 	return mapData, nil
@@ -141,7 +234,7 @@ func loadVertices(lump Lump, r io.ReaderAt) ([]Vertex, error) {
 	// 12 bytes per vertex
 	numVerts := int(lump.Length / 12)
 
-	fmt.Println("Vertex count: ", numVerts)
+	fmt.Println("Vertex count:", numVerts)
 
 	var vertexData []Vertex
 
@@ -259,6 +352,141 @@ func loadLightmapData(lump Lump, r io.ReaderAt) ([]uint8, error) {
 	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
 	for i := 0; i < num; i++ {
 		newItem := uint8(0)
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+
+	return data, nil
+}
+
+func loadBSPNodes(lump Lump, r io.ReaderAt) ([]BSPNode, error) {
+	// A BSP node is 28 bytes
+	num := int(lump.Length / 28)
+
+	fmt.Println("BSP Node count:", num)
+
+	data := make([]BSPNode, num)
+
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < num; i++ {
+		newItem := BSPNode{}
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+
+	return data, nil
+}
+
+func loadPlanes(lump Lump, r io.ReaderAt) ([]Plane, error) {
+	// A BSP plane is 20 bytes
+	num := int(lump.Length / 20)
+
+	fmt.Println("BSP Plane count:", num)
+
+	data := make([]Plane, num)
+
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < num; i++ {
+		newItem := Plane{}
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+	return data, nil
+}
+
+func loadBSPLeaves(lump Lump, r io.ReaderAt) ([]BSPLeaf, error) {
+	// A BSP leaf is 28 bytes
+	num := int(lump.Length / 28)
+
+	fmt.Println("BSP Leaf count:", num)
+
+	data := make([]BSPLeaf, num)
+
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < num; i++ {
+		newItem := BSPLeaf{}
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+
+	return data, nil
+}
+
+func loadLeafFaces(lump Lump, r io.ReaderAt) ([]LeafFace, error) {
+	// A leaf face is 2 bytes
+	num := int(lump.Length / 2)
+
+	fmt.Println("Leaf face count:", num)
+
+	data := make([]LeafFace, num)
+
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < num; i++ {
+		newItem := LeafFace(0)
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+
+	return data, nil
+}
+
+func loadVisibilityData(lump Lump, r io.ReaderAt) ([]uint8, error) {
+	// Each element is 1 byte
+	num := int(lump.Length / 1)
+
+	fmt.Println("Visibility data count:", num)
+
+	data := make([]uint8, num)
+
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+	for i := 0; i < num; i++ {
+		newItem := uint8(0)
+		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
+			return nil, err
+		}
+
+		// Add to array
+		data[i] = newItem
+	}
+
+	return data, nil
+}
+
+func loadVisibilityOffsets(lump Lump, r io.ReaderAt) ([]VisibilityOffset, error) {
+	reader := io.NewSectionReader(r, int64(lump.Offset), int64(lump.Length))
+
+	// Read visibility cluster size at the beginning of the lump
+	visibilityClusterSize := uint32(0)
+	if err := binary.Read(reader, binary.LittleEndian, &visibilityClusterSize); err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Visibility offset cluster count:", visibilityClusterSize)
+
+	// For every cluster, check the visibility state of other clusters
+	data := make([]VisibilityOffset, visibilityClusterSize)
+	for i := 0; i < int(visibilityClusterSize); i++ {
+		newItem := VisibilityOffset{}
 		if err := binary.Read(reader, binary.LittleEndian, &newItem); err != nil {
 			return nil, err
 		}

@@ -33,7 +33,13 @@ func NewPolygonBuffer(vertsByTexture map[int][]Surface, mapTextures []MapTexture
 	}
 
 	polygonBuffer := &PolygonBuffer{}
-	polygonBuffer.MapTextures = mapTextures[:]
+	polygonBuffer.MapTextures = make([]MapTexture, len(mapTextures))
+	// Copy
+	for index, mapTexture := range mapTextures {
+		polygonBuffer.MapTextures[index] = mapTexture
+		polygonBuffer.MapTextures[index].VertOffset = 0
+		polygonBuffer.MapTextures[index].VertCount = int32(0)
+	}
 	polygonBuffer.Buffer = make([]float32, bufferSize)
 
 	bufferOffset := 0
