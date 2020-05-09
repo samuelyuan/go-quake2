@@ -1,16 +1,18 @@
 package main
 
 import (
-	"./q2file"
 	"fmt"
-	"github.com/go-gl/gl/v4.1-core/gl"
-	"github.com/go-gl/glfw/v3.2/glfw"
 	"io"
 	"log"
 	"os"
 	"runtime"
 	"sort"
 	"strings"
+
+	"./q2file"
+	"./render"
+	"github.com/go-gl/gl/v4.1-core/gl"
+	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 const (
@@ -19,28 +21,15 @@ const (
 )
 
 var (
-	lightmapSize = int32(512)
-	SurfaceSky   = uint32(4)
+	SurfaceSky = uint32(4)
+	floatSize  = 4
 
 	windowHandler *WindowHandler
 )
 
 type RenderMap struct {
-	MapTextures []MapTexture
-	MapLightmap *MapLightmap
-}
-
-type MapTexture struct {
-	Id         uint32
-	Width      uint32
-	Height     uint32
-	VertOffset int32
-	VertCount  int32
-}
-
-type MapLightmap struct {
-	Texture uint32
-	Root    LightmapNode
+	MapTextures []render.MapTexture
+	MapLightmap *render.MapLightmap
 }
 
 func initOpenGL() uint32 {
@@ -51,44 +40,19 @@ func initOpenGL() uint32 {
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	fmt.Println("OpenGL version", version)
 
-	shader := q2file.NewShader()
+	shader := render.NewShader()
 	return shader.ProgramShader
 }
 
-// Initialize texture in OpenGL using image data
-func buildTexture(imageData []uint8, walData q2file.WalHeader) uint32 {
-	var texId uint32
-	gl.GenTextures(1, &texId)
-	gl.BindTexture(gl.TEXTURE_2D, texId)
-
-	// Give the image to OpenGL
-	gl.TexImage2D(uint32(gl.TEXTURE_2D), 0, int32(gl.RGB), int32(walData.Width), int32(walData.Height),
-		0, uint32(gl.RGB), uint32(gl.UNSIGNED_BYTE), gl.Ptr(imageData))
-
-	// Set texture wrapping/filtering options
-	gl.TexParameteri(uint32(gl.TEXTURE_2D), gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-	gl.TexParameteri(uint32(gl.TEXTURE_2D), gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-
-	return texId
-}
-
-func drawMap(vertices []float32, renderMap RenderMap, programShader uint32) {
-	var vao uint32
-	var vbo uint32
-
-	// Create buffers/arrays
-	gl.GenVertexArrays(1, &vao)
+func drawMap(vertices []float32, renderMap RenderMap, programShader uint32, vao uint32, vbo uint32) {
 	gl.BindVertexArray(vao)
-
-	// Load data
-	gl.GenBuffers(1, &vbo)
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	floatSize := 4 // size of float32 is 4
+
 	// Fill vertex buffer
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*floatSize, gl.Ptr(vertices), gl.STATIC_DRAW)
 
 	// 3 floats for vertex, 2 floats for texture UV, 2 floats for lightmap UV
-	stride := int32(TexturedVertexSize * floatSize)
+	stride := int32(render.TexturedVertexSize * floatSize)
 
 	// Position attribute
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, stride, gl.PtrOffset(0))
@@ -144,7 +108,10 @@ func getTextureFilename(texInfo q2file.TexInfo) string {
 	return filename
 }
 
-func createTextureList(pakReader io.ReaderAt, pakFileMap map[string]q2file.PakFile, textureIds map[string]int) []MapTexture {
+func createTextureList(
+	pakReader io.ReaderAt,
+	pakFileMap map[string]q2file.PakFile,
+	textureIds map[string]int) []render.MapTexture {
 	// get sorted strings
 	var fileKeys []string
 	for texFilename, _ := range textureIds {
@@ -153,47 +120,40 @@ func createTextureList(pakReader io.ReaderAt, pakFileMap map[string]q2file.PakFi
 	sort.Strings(fileKeys)
 
 	// iterate through filenames in the same order
-	oldMapTextures := make([]MapTexture, len(fileKeys))
+	oldMapTextures := make([]render.MapTexture, len(fileKeys))
 	for i := 0; i < len(fileKeys); i++ {
 		// stored in different folder
 		// append extension (.wal) as default
 		fullFilename := "textures/" + strings.Trim(fileKeys[i], " ") + ".wal"
 		fullFilename = strings.ToLower(fullFilename)
 		imageData, walData, err := q2file.LoadQ2WALFromPAK(pakReader, pakFileMap, fullFilename)
+
 		if err != nil {
 			fmt.Println("Warning: texture", fullFilename, "is missing.")
 			index := textureIds[fileKeys[i]]
-			oldMapTextures[index] = MapTexture{}
-			oldMapTextures[index].Width = 0
-			oldMapTextures[index].Height = 0
-			oldMapTextures[index].Id = 0
+			oldMapTextures[index] = render.NewMapTexture(0, 0, 0)
 			continue
 
 			// log.Fatal("Error loading texture in main:", err)
 			// return nil
 		}
-		// Initialize texture
-		texId := buildTexture(imageData, walData)
 
 		// the index is not necessarily in order
 		index := textureIds[fileKeys[i]]
-		oldMapTextures[index] = MapTexture{}
-		oldMapTextures[index].Width = walData.Width
-		oldMapTextures[index].Height = walData.Height
-		// opengl texture id
-		oldMapTextures[index].Id = texId
+		texId := render.BuildWALTexture(imageData, walData)
+		oldMapTextures[index] = render.NewMapTexture(texId, walData.Width, walData.Height)
 	}
 
 	return oldMapTextures
 }
 
-func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, faceIds []int) ([]float32, RenderMap) {
-	vertsByTexture := make(map[int][]Surface)
+func createRenderingData(mapData *q2file.MapData, mapTextures []render.MapTexture, faceIds []int) ([]float32, RenderMap) {
+	vertsByTexture := make(map[int][]render.Surface)
 
-	lightmap := NewLightmap()
+	lightmap := render.NewLightmap()
 
 	var offset uint16
-	allSurfaces := make([]Surface, 0)
+	allSurfaces := make([]render.Surface, 0)
 	for _, faceId := range faceIds {
 		faceInfo := mapData.Faces[faceId]
 		texInfo := mapData.TexInfos[faceInfo.TextureInfo]
@@ -210,7 +170,7 @@ func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 
 		_, ok := vertsByTexture[texId]
 		if !ok {
-			vertsByTexture[texId] = make([]Surface, 0)
+			vertsByTexture[texId] = make([]render.Surface, 0)
 		}
 
 		// Generate triangle fan from map face
@@ -229,7 +189,7 @@ func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 			v1 = v2
 		}
 
-		surface := NewSurface(faceVertices, texInfo, mapTexture.Width, mapTexture.Height, lightmap, faceInfo.LightmapOffset, mapData)
+		surface := render.NewSurface(faceVertices, texInfo, mapTexture.Width, mapTexture.Height, lightmap, faceInfo.LightmapOffset, mapData)
 
 		// Add all triangle data for this texture
 		vertsByTexture[texId] = append(vertsByTexture[texId], *surface)
@@ -240,7 +200,7 @@ func createRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 
-	polygonBuffer := NewPolygonBuffer(vertsByTexture, mapTextures)
+	polygonBuffer := render.NewPolygonBuffer(vertsByTexture, mapTextures)
 	renderMap := RenderMap{
 		MapLightmap: lightmap,
 		MapTextures: polygonBuffer.MapTextures,
@@ -262,38 +222,12 @@ func getEdgeVertex(mapData *q2file.MapData, faceEdgeIdx int) q2file.Vertex {
 	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
 }
 
-func NewLightmap() *MapLightmap {
-	var texture uint32
-	gl.GenTextures(1, &texture)
-	gl.BindTexture(gl.TEXTURE_2D, texture)
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lightmapSize, lightmapSize, 0, uint32(gl.RGBA), uint32(gl.UNSIGNED_BYTE), nil)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-
-	// Set the last pixel to white (for non-lightmapped faces)
-	whitePixel := []uint8{255, 255, 255, 255}
-	gl.TexSubImage2D(gl.TEXTURE_2D, 0, lightmapSize-1, lightmapSize-1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(whitePixel))
-
-	// Setup BSP tree here
-	return &MapLightmap{
-		Texture: texture,
-		Root: LightmapNode{
-			X:      0,
-			Y:      0,
-			Width:  lightmapSize,
-			Height: lightmapSize,
-			Nodes:  []LightmapNode{},
-			Filled: false,
-		},
-	}
-}
-
-func initMesh(pakFilename string, bspFilename string) (*q2file.MapData, []MapTexture, error) {
+func initMesh(pakFilename string, bspFilename string) (*q2file.MapData, []render.MapTexture, error) {
 	pakFile, err := os.Open(pakFilename)
 	defer pakFile.Close()
 
 	if err != nil {
-		log.Fatal("PAK file doesn't exist")
+		log.Fatal("PAK file ", pakFilename, " doesn't exist")
 		return nil, nil, err
 	}
 
@@ -345,6 +279,7 @@ func main() {
 
 	bspTree := NewBSPTree(mapData)
 	fmt.Println("BSP Tree built")
+
 	allFaceIds := make([]int, len(mapData.Faces))
 	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
 		allFaceIds[faceIdx] = faceIdx
@@ -355,6 +290,13 @@ func main() {
 	camera := NewCamera(windowHandler)
 	prevLeaf := -1
 	curLeaf := 0
+
+	// Create buffers/arrays
+	var vao uint32
+	var vbo uint32
+	gl.GenVertexArrays(1, &vao)
+	gl.GenBuffers(1, &vbo)
+
 	for !windowHandler.shouldClose() {
 		windowHandler.startFrame()
 
@@ -386,7 +328,7 @@ func main() {
 			}
 			prevLeaf = curLeaf
 		}
-		drawMap(vertexBuffer, renderMap, programShader)
+		drawMap(vertexBuffer, renderMap, programShader, vao, vbo)
 
 		camera.UpdateViewMatrix()
 	}
