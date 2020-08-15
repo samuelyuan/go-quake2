@@ -40,7 +40,7 @@ func initOpenGL() uint32 {
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	fmt.Println("OpenGL version", version)
 
-	shader := render.NewShader()
+	shader := render.NewShader("render/goquake2.vert", "render/goquake2.frag")
 	return shader.ProgramShader
 }
 

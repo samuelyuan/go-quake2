@@ -1,48 +1,13 @@
 package render
 
 import (
+	"bufio"
 	"fmt"
-	"github.com/go-gl/gl/v4.1-core/gl"
+	"log"
+	"os"
 	"strings"
-)
 
-const (
-	vertexShaderSource = `
-		#version 410
-	  layout (location = 0) in vec3 position;
-		layout (location = 1) in vec2 vertTexCoord;
-		layout (location = 2) in vec2 texCoord2;
-		out vec2 fragTexCoord;
-		out vec2 vertexLightmapCoord;
-
-    uniform mat4 view;
-		uniform mat4 projection;
-
-		void main() {
-			fragTexCoord = vertTexCoord;
-			vertexLightmapCoord = texCoord2;
-
-			gl_Position = projection * view * vec4(position, 1.0);
-		}
-	` + "\x00"
-
-	fragmentShaderSource = `
-		#version 410
-
-		uniform sampler2D diffuse;
-		uniform sampler2D lightmap;
-
-		in vec2 fragTexCoord;
-		in vec2 vertexLightmapCoord;
-		out vec4 fragColor;
-
-		void main() {
-			vec4 diffuseColor = texture(diffuse, fragTexCoord.st);
-			vec4 lightColor = texture(lightmap, vertexLightmapCoord.st);
-
-			fragColor = vec4(diffuseColor.rgb * lightColor.rgb, diffuseColor.a);
-		}
-	` + "\x00"
+	"github.com/go-gl/gl/v4.1-core/gl"
 )
 
 type Shader struct {
@@ -51,12 +16,12 @@ type Shader struct {
 	ProgramShader  uint32
 }
 
-func NewShader() *Shader {
+func NewShader(vertexFilePath string, fragmentFilePath string) *Shader {
 	sh := Shader{}
 
 	// compile shaders
-	sh.VertexShader = sh.initVertexShader()
-	sh.FragmentShader = sh.initFragmentShader()
+	sh.VertexShader = sh.initVertexShader(vertexFilePath)
+	sh.FragmentShader = sh.initFragmentShader(fragmentFilePath)
 
 	programShader := gl.CreateProgram()
 	gl.AttachShader(programShader, sh.VertexShader)
@@ -90,18 +55,38 @@ func (sh *Shader) compileShader(source string, shaderType uint32) (uint32, error
 	return shader, nil
 }
 
-func (sh *Shader) initVertexShader() uint32 {
-	vertexShader, err := sh.compileShader(vertexShaderSource, gl.VERTEX_SHADER)
+func (sh *Shader) initVertexShader(filePath string) uint32 {
+	vertexShader, err := sh.compileShader(sh.readShaderCode(filePath), gl.VERTEX_SHADER)
 	if err != nil {
 		panic(err)
 	}
 	return vertexShader
 }
 
-func (sh *Shader) initFragmentShader() uint32 {
-	fragmentShader, err := sh.compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER)
+func (sh *Shader) initFragmentShader(filePath string) uint32 {
+	fragmentShader, err := sh.compileShader(sh.readShaderCode(filePath), gl.FRAGMENT_SHADER)
 	if err != nil {
 		panic(err)
 	}
 	return fragmentShader
+}
+
+// Read shader code from file
+func (sh *Shader) readShaderCode(filePath string) string {
+	code := ""
+	f, err := os.Open(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		code += "\n" + scanner.Text()
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	code += "\x00"
+	return code
 }
