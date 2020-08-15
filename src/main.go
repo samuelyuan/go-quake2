@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
-	"go-quake2/q2file"
-	"go-quake2/render"
+	"github.com/samuelyuan/go-quake2/q2file"
+	"github.com/samuelyuan/go-quake2/render"
 )
 
 const (

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"go-quake2/q2file"
+	"github.com/samuelyuan/go-quake2/q2file"
 	"sort"
 )
 
