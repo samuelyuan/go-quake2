@@ -1,4 +1,4 @@
-module go-quake2
+module github.com/samuelyuan/go-quake2
 
 go 1.15
 
