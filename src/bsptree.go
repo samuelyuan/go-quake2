@@ -1,7 +1,7 @@
 package main
 
 import (
-	"./q2file"
+	"github.com/samuelyuan/go-quake2/q2file"
 	"sort"
 )
 
@@ -135,7 +135,7 @@ func getUniqueFacesFromVisibleFaces(visibleFaces []int) map[int]bool {
 	return uniqueFaces
 }
 
-func getFaceIdsFromUniqueFaces(uniqueFaces map[int] bool) []int {
+func getFaceIdsFromUniqueFaces(uniqueFaces map[int]bool) []int {
 	clusterFaces := make([]int, 0)
 	for faceId, _ := range uniqueFaces {
 		clusterFaces = append(clusterFaces, faceId)
