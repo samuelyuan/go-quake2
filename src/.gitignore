@@ -1,3 +1,4 @@
 data/
 test/*.png
-*.exe 
+*.exe
+go-quake2
