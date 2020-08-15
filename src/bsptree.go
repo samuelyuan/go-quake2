@@ -71,23 +71,12 @@ func getFacesInCluster(leavesInCluster map[ClusterId][]TreeLeaf) map[ClusterId][
 	for cluster, leaves := range leavesInCluster {
 		visibleFaces := make([]int, 0)
 		for _, leaf := range leaves {
-			for _, faceId := range leaf.Faces {
-				visibleFaces = append(visibleFaces, faceId)
-			}
+			leafFaceIds := getFaceIdsFromFaces(leaf.Faces)
+			visibleFaces = append(visibleFaces, leafFaceIds...)
 		}
 
-		uniqueFaces := make(map[int]bool)
-		for _, faceId := range visibleFaces {
-			_, exists := uniqueFaces[faceId]
-			if !exists {
-				uniqueFaces[faceId] = true
-			}
-		}
-
-		facesInCluster[cluster] = make([]int, 0)
-		for faceId, _ := range uniqueFaces {
-			facesInCluster[cluster] = append(facesInCluster[cluster], faceId)
-		}
+		uniqueFaces := getUniqueFacesFromVisibleFaces(visibleFaces)
+		facesInCluster[cluster] = getFaceIdsFromUniqueFaces(uniqueFaces)
 	}
 	return facesInCluster
 }
@@ -96,16 +85,12 @@ func getFacesInCluster(leavesInCluster map[ClusterId][]TreeLeaf) map[ClusterId][
 func getFacesFromCluster(mapData *q2file.MapData, facesInCluster map[ClusterId][]int) map[ClusterId][]int {
 	facesFromCluster := make(map[ClusterId][]int)
 	for cluster, faces := range facesInCluster {
-		visibleFaces := make([]int, 0)
-
-		// copy existing faces
-		for _, faceId := range faces {
-			visibleFaces = append(visibleFaces, faceId)
-		}
-
 		if cluster == clusterInvalidId {
 			continue
 		}
+
+		// copy existing faces
+		visibleFaces := getFaceIdsFromFaces(faces)
 
 		// PVS buffer index
 		v := mapData.VisibilityOffsets[cluster].Pvs
@@ -123,9 +108,8 @@ func getFacesFromCluster(mapData *q2file.MapData, facesInCluster map[ClusterId][
 				for bit := 0; bit < 8; bit++ {
 					_, clusterExists := facesInCluster[ClusterId(otherClusterIndex)]
 					if mapData.VisibilityData[v]&(1<<uint32(bit)) != 0 && clusterExists {
-						for _, faceId := range facesInCluster[ClusterId(otherClusterIndex)] {
-							visibleFaces = append(visibleFaces, faceId)
-						}
+						clusterFaceIds := getFaceIdsFromFaces(facesInCluster[ClusterId(otherClusterIndex)])
+						visibleFaces = append(visibleFaces, clusterFaceIds...)
 					}
 					otherClusterIndex += 1
 				}
@@ -133,21 +117,38 @@ func getFacesFromCluster(mapData *q2file.MapData, facesInCluster map[ClusterId][
 			v += 1
 		}
 
-		uniqueFaces := make(map[int]bool)
-		for _, faceId := range visibleFaces {
-			_, exists := uniqueFaces[faceId]
-			if !exists {
-				uniqueFaces[faceId] = true
-			}
-		}
-
-		facesFromCluster[cluster] = make([]int, 0)
-		for faceId, _ := range uniqueFaces {
-			facesFromCluster[cluster] = append(facesFromCluster[cluster], faceId)
-		}
+		uniqueFaces := getUniqueFacesFromVisibleFaces(visibleFaces)
+		facesFromCluster[cluster] = getFaceIdsFromUniqueFaces(uniqueFaces)
 		sort.Ints(facesFromCluster[cluster])
 	}
 	return facesFromCluster
+}
+
+func getUniqueFacesFromVisibleFaces(visibleFaces []int) map[int]bool {
+	uniqueFaces := make(map[int]bool)
+	for _, faceId := range visibleFaces {
+		_, exists := uniqueFaces[faceId]
+		if !exists {
+			uniqueFaces[faceId] = true
+		}
+	}
+	return uniqueFaces
+}
+
+func getFaceIdsFromUniqueFaces(uniqueFaces map[int] bool) []int {
+	clusterFaces := make([]int, 0)
+	for faceId, _ := range uniqueFaces {
+		clusterFaces = append(clusterFaces, faceId)
+	}
+	return clusterFaces
+}
+
+func getFaceIdsFromFaces(faces []int) []int {
+	faceIds := make([]int, 0)
+	for _, id := range faces {
+		faceIds = append(faceIds, id)
+	}
+	return faceIds
 }
 
 func getTreeLeaves(mapData *q2file.MapData, allLeaves []TreeLeaf, facesFromCluster map[ClusterId][]int, allFaceIds []int) []TreeLeaf {
@@ -187,6 +188,7 @@ func (tree *BSPTree) findLeafNode(startNode int, mapData *q2file.MapData, positi
 			d = dotProduct - plane.Distance
 		}
 
+		// Determine which side of the plane the node is on
 		if d < 0 {
 			nodeId = int(node.BackChild)
 		} else {
