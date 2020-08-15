@@ -1,8 +1,8 @@
 package render
 
 import (
-	"../q2file"
 	"github.com/go-gl/gl/v4.1-core/gl"
+	"go-quake2/q2file"
 )
 
 type MapTexture struct {

@@ -3,8 +3,8 @@ package render
 import (
 	"math"
 
-	"../q2file"
 	"github.com/go-gl/gl/v4.1-core/gl"
+	"go-quake2/q2file"
 )
 
 // Contains all the triangles of a face to be passed to the renderer
