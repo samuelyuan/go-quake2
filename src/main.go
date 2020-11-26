@@ -21,16 +21,8 @@ const (
 )
 
 var (
-	SurfaceSky = uint32(4)
-	floatSize  = 4
-
 	windowHandler *WindowHandler
 )
-
-type RenderMap struct {
-	MapTextures []render.MapTexture
-	MapLightmap *render.MapLightmap
-}
 
 func initOpenGL() uint32 {
 	if err := gl.Init(); err != nil {
@@ -44,74 +36,11 @@ func initOpenGL() uint32 {
 	return shader.ProgramShader
 }
 
-func drawMap(vertices []float32, renderMap RenderMap, programShader uint32, vao uint32, vbo uint32) {
-	gl.BindVertexArray(vao)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-
-	// Fill vertex buffer
-	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*floatSize, gl.Ptr(vertices), gl.STATIC_DRAW)
-
-	// 3 floats for vertex, 2 floats for texture UV, 2 floats for lightmap UV
-	stride := int32(render.TexturedVertexSize * floatSize)
-
-	// Position attribute
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, stride, gl.PtrOffset(0))
-	gl.EnableVertexAttribArray(0)
-
-	// Texture
-	gl.VertexAttribPointer(1, 2, gl.FLOAT, false, stride, gl.PtrOffset(3*floatSize))
-	gl.EnableVertexAttribArray(1)
-
-	// Lightmap
-	gl.VertexAttribPointer(2, 2, gl.FLOAT, false, stride, gl.PtrOffset(5*floatSize))
-	gl.EnableVertexAttribArray(2)
-
-	diffuseUniform := gl.GetUniformLocation(programShader, gl.Str("diffuse\x00"))
-	gl.Uniform1i(diffuseUniform, 0)
-
-	// Bind the lightmap texture shared by all the faces
-	gl.ActiveTexture(gl.TEXTURE1)
-	gl.BindTexture(gl.TEXTURE_2D, (*renderMap.MapLightmap).Texture)
-	lightmapUniform := gl.GetUniformLocation(programShader, gl.Str("lightmap\x00"))
-	gl.Uniform1i(lightmapUniform, 1)
-
-	// Since faces are sorted by texture, we loop through all textures in the map
-	mapTextures := renderMap.MapTextures
-	for i := 0; i < len(mapTextures); i++ {
-		texture := mapTextures[i]
-
-		if texture.VertCount == 0 {
-			continue
-		}
-
-		// Bind the texture
-		gl.ActiveTexture(gl.TEXTURE0)
-		gl.BindTexture(gl.TEXTURE_2D, texture.Id)
-
-		// Draw all faces for this texture
-		gl.DrawArrays(gl.TRIANGLES, texture.VertOffset, texture.VertCount)
-	}
-
-	return
-}
-
-func getTextureFilename(texInfo q2file.TexInfo) string {
-	// convert filename byte array to string
-	filename := ""
-	for i := 0; i < len(texInfo.TextureName); i++ {
-		// end of string
-		if texInfo.TextureName[i] == 0 {
-			break
-		}
-		filename += string(texInfo.TextureName[i])
-	}
-	return filename
-}
-
 func createTextureList(
 	pakReader io.ReaderAt,
 	pakFileMap map[string]q2file.PakFile,
-	textureIds map[string]int) []render.MapTexture {
+	textureIds map[string]int,
+) []render.MapTexture {
 	// get sorted strings
 	var fileKeys []string
 	for texFilename, _ := range textureIds {
@@ -145,81 +74,6 @@ func createTextureList(
 	}
 
 	return oldMapTextures
-}
-
-func createRenderingData(mapData *q2file.MapData, mapTextures []render.MapTexture, faceIds []int) ([]float32, RenderMap) {
-	vertsByTexture := make(map[int][]render.Surface)
-
-	lightmap := render.NewLightmap()
-
-	var offset uint16
-	allSurfaces := make([]render.Surface, 0)
-	for _, faceId := range faceIds {
-		faceInfo := mapData.Faces[faceId]
-		texInfo := mapData.TexInfos[faceInfo.TextureInfo]
-
-		// Hide skybox
-		if texInfo.Flags&SurfaceSky != 0 {
-			continue
-		}
-
-		// Get index in texture array
-		filename := getTextureFilename(texInfo)
-		texId := mapData.TextureIds[filename]
-		mapTexture := mapTextures[texId]
-
-		_, ok := vertsByTexture[texId]
-		if !ok {
-			vertsByTexture[texId] = make([]render.Surface, 0)
-		}
-
-		// Generate triangle fan from map face
-		var faceVertices []q2file.Vertex
-		// Fix the first vertex
-		v0 := getEdgeVertex(mapData, int(faceInfo.FirstEdge))
-		v1 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+1)
-
-		for offset = 2; offset < faceInfo.NumEdges; offset++ {
-			v2 := getEdgeVertex(mapData, int(faceInfo.FirstEdge)+int(offset))
-
-			// Add triangle
-			faceVertices = append(faceVertices, v0, v1, v2)
-
-			// Move to the next triangle
-			v1 = v2
-		}
-
-		surface := render.NewSurface(faceVertices, texInfo, mapTexture.Width, mapTexture.Height, lightmap, faceInfo.LightmapOffset, mapData)
-
-		// Add all triangle data for this texture
-		vertsByTexture[texId] = append(vertsByTexture[texId], *surface)
-		allSurfaces = append(allSurfaces, *surface)
-	}
-
-	// Generate mipmaps for the lightmap
-	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
-	gl.GenerateMipmap(gl.TEXTURE_2D)
-
-	polygonBuffer := render.NewPolygonBuffer(vertsByTexture, mapTextures)
-	renderMap := RenderMap{
-		MapLightmap: lightmap,
-		MapTextures: polygonBuffer.MapTextures,
-	}
-	return polygonBuffer.Buffer, renderMap
-}
-
-func getEdgeVertex(mapData *q2file.MapData, faceEdgeIdx int) q2file.Vertex {
-	edgeIdx := int(mapData.FaceEdges[faceEdgeIdx].EdgeIndex)
-
-	// Edge index is positive
-	if edgeIdx >= 0 {
-		// Return first vertex as the start of the edge
-		return mapData.Vertices[mapData.Edges[edgeIdx].V1]
-	}
-
-	// Edge index is negative
-	// Return second vertex as the start of the edge
-	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
 }
 
 func initMesh(pakFilename string, bspFilename string) (*q2file.MapData, []render.MapTexture, error) {
@@ -284,7 +138,7 @@ func main() {
 	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
 		allFaceIds[faceIdx] = faceIdx
 	}
-	vertexBuffer, renderMap := createRenderingData(mapData, oldMapTextures, allFaceIds)
+	renderMap := render.CreateRenderingData(mapData, oldMapTextures, allFaceIds)
 	fmt.Println("Rendering data is generated. Begin rendering.")
 
 	camera := NewCamera(windowHandler)
@@ -324,11 +178,11 @@ func main() {
 		// Update the polygons if the player is in a different leaf
 		if prevLeaf != curLeaf {
 			if len(leaf.Faces) > 0 {
-				vertexBuffer, renderMap = createRenderingData(mapData, oldMapTextures, leaf.Faces)
+				renderMap = render.CreateRenderingData(mapData, oldMapTextures, leaf.Faces)
 			}
 			prevLeaf = curLeaf
 		}
-		drawMap(vertexBuffer, renderMap, programShader, vao, vbo)
+		render.DrawMap(renderMap, programShader, vao, vbo)
 
 		camera.UpdateViewMatrix()
 	}

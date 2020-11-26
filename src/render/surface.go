@@ -3,7 +3,6 @@ package render
 import (
 	"math"
 
-	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/samuelyuan/go-quake2/q2file"
 )
 
@@ -40,9 +39,6 @@ func NewSurface(
 	texInfo q2file.TexInfo,
 	textureWidth uint32,
 	textureHeight uint32,
-	lightmap *MapLightmap, // Update lightmap for this face
-	faceLightmapOffset uint32,
-	mapData *q2file.MapData,
 ) *Surface {
 	surface := &Surface{}
 	surface.TexInfo = texInfo
@@ -66,32 +62,50 @@ func NewSurface(
 		surface.TexturedVertices[i] = texturedVertex
 	}
 
+	return surface
+}
+
+func (surface *Surface) UpdateLightmap(
+	lightmap *MapLightmap, // Update lightmap for this face
+	faceVertices []q2file.Vertex,
+	texInfo q2file.TexInfo,
+	faceLightmapOffset uint32,
+	mapData *q2file.MapData,
+) {
 	// Check if face has a lightmap
 	if texInfo.Flags == 0 {
 		lightmapDimensions := getLightmapDimensions(faceVertices, texInfo)
-		lightmapRect := readLightmap(lightmap, faceLightmapOffset, lightmapDimensions.Width, lightmapDimensions.Height, mapData)
+		if lightmapDimensions.Height <= 0 || lightmapDimensions.Width <= 0 {
+			return
+		}
 
-		// Lightmap texture coordinates
+		// Navigate lightmap BSP to find correctly sized space
+		lightmapRect := AllocateLightmapRect(&lightmap.Root, lightmapDimensions.Width, lightmapDimensions.Height)
+		if lightmapRect == nil {
+			return
+		}
+
+		totalPixels := lightmapDimensions.Width * lightmapDimensions.Height
+		lightmap.CopyMapLightmapToTexture(faceLightmapOffset, mapData.LightmapData, lightmapRect, totalPixels)
+
+		// Update lightmap texture coordinates for rendering
 		for i := 0; i < len(surface.TexturedVertices); i++ {
 			x := surface.TexturedVertices[i].X
 			y := surface.TexturedVertices[i].Y
 			z := surface.TexturedVertices[i].Z
 
-			if lightmapRect != nil {
-				s := ((x*texInfo.UAxis[0] + y*texInfo.UAxis[1] + z*texInfo.UAxis[2]) + texInfo.UOffset) - lightmapDimensions.MinU
-				s += float32((lightmapRect.X * 16) + 8)
-				s /= float32(lightmapSize * 16)
+			s := ((x*texInfo.UAxis[0] + y*texInfo.UAxis[1] + z*texInfo.UAxis[2]) + texInfo.UOffset) - lightmapDimensions.MinU
+			s += float32((lightmapRect.X * 16) + 8)
+			s /= float32(LIGHTMAP_SIZE * 16)
 
-				t := ((x*texInfo.VAxis[0] + y*texInfo.VAxis[1] + z*texInfo.VAxis[2]) + texInfo.VOffset) - lightmapDimensions.MinV
-				t += float32((lightmapRect.Y * 16) + 8)
-				t /= float32(lightmapSize * 16)
+			t := ((x*texInfo.VAxis[0] + y*texInfo.VAxis[1] + z*texInfo.VAxis[2]) + texInfo.VOffset) - lightmapDimensions.MinV
+			t += float32((lightmapRect.Y * 16) + 8)
+			t /= float32(LIGHTMAP_SIZE * 16)
 
-				surface.TexturedVertices[i].LightU = s
-				surface.TexturedVertices[i].LightV = t
-			}
+			surface.TexturedVertices[i].LightU = s
+			surface.TexturedVertices[i].LightV = t
 		}
 	}
-	return surface
 }
 
 // Get the width and height of the lightmap
@@ -132,66 +146,6 @@ func getLightmapDimensions(faceVertices []q2file.Vertex, texInfo q2file.TexInfo)
 		MinU:   float32(math.Floor(minU)),
 		MinV:   float32(math.Floor(minV)),
 	}
-}
-
-func readLightmap(
-	lightmap *MapLightmap,
-	offset uint32,
-	width int32,
-	height int32,
-	mapData *q2file.MapData) *LightmapNode {
-	if height <= 0 || width <= 0 {
-		return nil
-	}
-
-	// Navigate lightmap BSP to find correctly sized space
-	node := AllocateLightmapRect(&lightmap.Root, width, height)
-	if node != nil {
-		// Each pixel has 4 values for RGBA
-		byteCount := width * height * 4
-		bytes := make([]uint8, byteCount)
-		curByte := 0
-
-		baseIndex := int(offset)
-		for i := 0; i < int(width*height); i++ {
-			// Change the brightness
-			lightScale := 4
-			r := int(mapData.LightmapData[baseIndex+0]) * lightScale
-			g := int(mapData.LightmapData[baseIndex+1]) * lightScale
-			b := int(mapData.LightmapData[baseIndex+2]) * lightScale
-			max := 0
-			if r > g {
-				max = r
-			} else {
-				max = g
-			}
-			if b > max {
-				max = b
-			}
-			// Rescale color components if any component exceeds the maximum value (255)
-			if max > 255 {
-				t := float32(255.0) / float32(max)
-
-				r = int(float32(r) * t)
-				g = int(float32(g) * t)
-				b = int(float32(b) * t)
-			}
-
-			bytes[curByte+0] = uint8(r)
-			bytes[curByte+1] = uint8(g)
-			bytes[curByte+2] = uint8(b)
-			bytes[curByte+3] = 255
-			curByte += 4
-
-			// read only 3 components
-			baseIndex += 3
-		}
-
-		// Copy the lightmap into the allocated rectangle
-		gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
-		gl.TexSubImage2D(gl.TEXTURE_2D, 0, node.X, node.Y, width, height, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(bytes))
-	}
-	return node
 }
 
 func getTextureUV(vtx q2file.Vertex, tex q2file.TexInfo) [2]float32 {

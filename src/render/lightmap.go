@@ -4,8 +4,8 @@ import (
 	"github.com/go-gl/gl/v4.1-core/gl"
 )
 
-var (
-	lightmapSize = int32(512)
+const (
+	LIGHTMAP_SIZE = int32(512)
 )
 
 type MapLightmap struct {
@@ -23,30 +23,96 @@ type LightmapNode struct {
 }
 
 func NewLightmap() *MapLightmap {
-	var texture uint32
-	gl.GenTextures(1, &texture)
-	gl.BindTexture(gl.TEXTURE_2D, texture)
+	textureId := generateTexture()
 
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lightmapSize, lightmapSize, 0, uint32(gl.RGBA), uint32(gl.UNSIGNED_BYTE), nil)
+	// Setup BSP tree here
+	return &MapLightmap{
+		Texture: textureId,
+		Root: LightmapNode{
+			X:      0,
+			Y:      0,
+			Width:  LIGHTMAP_SIZE,
+			Height: LIGHTMAP_SIZE,
+			Nodes:  []LightmapNode{},
+			Filled: false,
+		},
+	}
+}
+
+func generateTexture() uint32 {
+	var textureId uint32
+	gl.GenTextures(1, &textureId)
+	gl.BindTexture(gl.TEXTURE_2D, textureId)
+
+	// Initialize empty region to be updated later
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_SIZE, LIGHTMAP_SIZE, 0, uint32(gl.RGBA), uint32(gl.UNSIGNED_BYTE), nil)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
 
 	// Set the last pixel to white (for non-lightmapped faces)
 	whitePixel := []uint8{255, 255, 255, 255}
-	gl.TexSubImage2D(gl.TEXTURE_2D, 0, lightmapSize-1, lightmapSize-1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(whitePixel))
+	gl.TexSubImage2D(gl.TEXTURE_2D, 0, LIGHTMAP_SIZE-1, LIGHTMAP_SIZE-1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(whitePixel))
 
-	// Setup BSP tree here
-	return &MapLightmap{
-		Texture: texture,
-		Root: LightmapNode{
-			X:      0,
-			Y:      0,
-			Width:  lightmapSize,
-			Height: lightmapSize,
-			Nodes:  []LightmapNode{},
-			Filled: false,
-		},
+	return textureId
+}
+
+func (lightmap *MapLightmap) GenerateMipmaps() {
+	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
+	gl.GenerateMipmap(gl.TEXTURE_2D)
+}
+
+func (lightmap *MapLightmap) CopyMapLightmapToTexture(
+	arrayOffset uint32,
+	lightmapData []uint8,
+	destinationNode *LightmapNode,
+	totalPixels int32,
+) {
+	// Each pixel has 4 values for RGBA
+	pixels := make([]uint8, totalPixels*4)
+	curByteWrite := 0
+
+	baseIndexRead := int(arrayOffset)
+	for i := 0; i < int(totalPixels); i++ {
+		// Change the brightness
+		lightScale := 4
+		r := int(lightmapData[baseIndexRead+0]) * lightScale
+		g := int(lightmapData[baseIndexRead+1]) * lightScale
+		b := int(lightmapData[baseIndexRead+2]) * lightScale
+		max := 0
+		if r > g {
+			max = r
+		} else {
+			max = g
+		}
+		if b > max {
+			max = b
+		}
+		// Rescale color components if any component exceeds the maximum value (255)
+		if max > 255 {
+			t := float32(255.0) / float32(max)
+
+			r = int(float32(r) * t)
+			g = int(float32(g) * t)
+			b = int(float32(b) * t)
+		}
+
+		pixels[curByteWrite+0] = uint8(r)
+		pixels[curByteWrite+1] = uint8(g)
+		pixels[curByteWrite+2] = uint8(b)
+		pixels[curByteWrite+3] = 255
+		curByteWrite += 4
+
+		// read only 3 components
+		baseIndexRead += 3
 	}
+
+	lightmap.updateSubTexture(destinationNode, pixels)
+}
+
+func (lightmap *MapLightmap) updateSubTexture(node *LightmapNode, pixels []uint8) {
+	// Copy the lightmap into the allocated rectangle
+	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
+	gl.TexSubImage2D(gl.TEXTURE_2D, 0, node.X, node.Y, node.Width, node.Height, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels))
 }
 
 // Navigate the Lightmap BSP tree and find an empty spot of the right size
