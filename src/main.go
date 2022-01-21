@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/samuelyuan/go-quake2/q2file"
 	"github.com/samuelyuan/go-quake2/render"
@@ -23,18 +22,6 @@ const (
 var (
 	windowHandler *WindowHandler
 )
-
-func initOpenGL() uint32 {
-	if err := gl.Init(); err != nil {
-		panic(err)
-	}
-
-	version := gl.GoStr(gl.GetString(gl.VERSION))
-	fmt.Println("OpenGL version", version)
-
-	shader := render.NewShader("render/goquake2.vert", "render/goquake2.frag")
-	return shader.ProgramShader
-}
 
 func createTextureList(
 	pakReader io.ReaderAt,
@@ -112,17 +99,9 @@ func main() {
 	}
 	defer glfw.Terminate()
 	windowHandler = NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
-	programShader := initOpenGL()
 
-	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
-	gl.Enable(gl.DEPTH_TEST)
-
-	// Set appropriate blending mode
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-	gl.Enable(gl.CULL_FACE)
-	gl.CullFace(gl.FRONT)
+	renderer := render.NewRenderer()
+	renderer.Init()
 
 	// Load files
 	mapData, oldMapTextures, err := initMesh("./data/pak0.pak", "maps/demo1.bsp")
@@ -134,42 +113,15 @@ func main() {
 	bspTree := NewBSPTree(mapData)
 	fmt.Println("BSP Tree built")
 
-	allFaceIds := make([]int, len(mapData.Faces))
-	for faceIdx := 0; faceIdx < len(mapData.Faces); faceIdx++ {
-		allFaceIds[faceIdx] = faceIdx
-	}
-	renderMap := render.CreateRenderingData(mapData, oldMapTextures, allFaceIds)
-	fmt.Println("Rendering data is generated. Begin rendering.")
-
 	camera := NewCamera(windowHandler)
 	prevLeaf := -1
 	curLeaf := 0
 
-	// Create buffers/arrays
-	var vao uint32
-	var vbo uint32
-	gl.GenVertexArrays(1, &vao)
-	gl.GenBuffers(1, &vbo)
+	var renderMap render.RenderMap
 
 	for !windowHandler.shouldClose() {
 		windowHandler.startFrame()
-
-		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-		// Activate shader
-		gl.UseProgram(programShader)
-
-		// Create transformations
-		view := camera.GetViewMatrix()
-		projection := camera.GetPerspectiveMatrix()
-
-		// Get their uniform location
-		viewLoc := gl.GetUniformLocation(programShader, gl.Str("view\x00"))
-		projectionLoc := gl.GetUniformLocation(programShader, gl.Str("projection\x00"))
-
-		// Pass the matrices to the shader
-		gl.UniformMatrix4fv(viewLoc, 1, false, &view[0])
-		gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
+		renderer.PrepareFrame(camera.GetViewMatrix(), camera.GetPerspectiveMatrix())
 
 		// Render map data to the screen
 		// Figure out which leaf the player is in and only render faces in that leaf
@@ -182,7 +134,7 @@ func main() {
 			}
 			prevLeaf = curLeaf
 		}
-		render.DrawMap(renderMap, programShader, vao, vbo)
+		render.DrawMap(renderMap, renderer.Shader.ProgramShader, renderer.Vao, renderer.Vbo)
 
 		camera.UpdateViewMatrix()
 	}
