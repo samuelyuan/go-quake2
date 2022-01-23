@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 
 type WindowHandler struct {
 	glfwWindow   *glfw.Window
-	inputHandler *InputHandler
+	InputHandler *InputHandler
 
 	firstFrame    bool
 	deltaTime     float64
@@ -42,7 +42,7 @@ func NewWindowHandler(width, height int, title string) *WindowHandler {
 
 	return &WindowHandler{
 		glfwWindow:   glfwWindow,
-		inputHandler: inputHandler,
+		InputHandler: inputHandler,
 		firstFrame:   true,
 	}
 }
@@ -52,13 +52,13 @@ func resizeCallback(w *glfw.Window, width int, height int) {
 	gl.Viewport(0, 0, int32(width), int32(height))
 }
 
-func (windowHandler *WindowHandler) startFrame() {
+func (windowHandler *WindowHandler) StartFrame() {
 	windowHandler.glfwWindow.SwapBuffers()
 
 	// Window events for keyboard and mouse
 	glfw.PollEvents()
 
-	if windowHandler.inputHandler.isActive(PROGRAM_QUIT) {
+	if windowHandler.InputHandler.IsActive(PROGRAM_QUIT) {
 		windowHandler.glfwWindow.SetShouldClose(true)
 	}
 
@@ -73,13 +73,13 @@ func (windowHandler *WindowHandler) startFrame() {
 	windowHandler.deltaTime = currentFrameTime - windowHandler.lastFrameTime
 	windowHandler.lastFrameTime = currentFrameTime
 
-	windowHandler.inputHandler.updateCursor()
+	windowHandler.InputHandler.updateCursor()
 }
 
-func (windowHandler *WindowHandler) shouldClose() bool {
+func (windowHandler *WindowHandler) ShouldClose() bool {
 	return windowHandler.glfwWindow.ShouldClose()
 }
 
-func (windowHandler *WindowHandler) getTimeSinceLastFrame() float64 {
+func (windowHandler *WindowHandler) GetTimeSinceLastFrame() float64 {
 	return windowHandler.deltaTime
 }

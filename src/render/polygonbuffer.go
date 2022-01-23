@@ -15,10 +15,10 @@ type PolygonBuffer struct {
 }
 
 // Rearrange data by texture
-func NewPolygonBuffer(vertsByTexture map[int][]Surface, mapTextures []MapTexture) *PolygonBuffer {
+func NewPolygonBuffer(surfacesByTexture map[int][]Surface, mapTextures []MapTexture) *PolygonBuffer {
 	// only get the textures that were used in the map
 	var texKeys []int
-	for k, _ := range vertsByTexture {
+	for k, _ := range surfacesByTexture {
 		texKeys = append(texKeys, k)
 	}
 	sort.Ints(texKeys)
@@ -26,7 +26,7 @@ func NewPolygonBuffer(vertsByTexture map[int][]Surface, mapTextures []MapTexture
 	// allocate a buffer
 	bufferSize := 0
 	for _, textureId := range texKeys {
-		for _, surface := range vertsByTexture[textureId] {
+		for _, surface := range surfacesByTexture[textureId] {
 			// Each element has 7 floats
 			bufferSize += int(len(surface.TexturedVertices)) * TexturedVertexSize
 		}
@@ -49,7 +49,7 @@ func NewPolygonBuffer(vertsByTexture map[int][]Surface, mapTextures []MapTexture
 		polygonBuffer.MapTextures[textureId].VertCount = int32(0)
 
 		// Fill in the buffer
-		for _, surface := range vertsByTexture[textureId] {
+		for _, surface := range surfacesByTexture[textureId] {
 			polygonBuffer.MapTextures[textureId].VertCount += int32(len(surface.TexturedVertices))
 
 			for _, vertex := range surface.TexturedVertices {

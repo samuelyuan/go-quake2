@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/samuelyuan/go-quake2/client"
 	"github.com/samuelyuan/go-quake2/q2file"
 	"github.com/samuelyuan/go-quake2/render"
 )
@@ -20,7 +21,7 @@ const (
 )
 
 var (
-	windowHandler *WindowHandler
+	windowHandler *client.WindowHandler
 )
 
 func createTextureList(
@@ -49,9 +50,6 @@ func createTextureList(
 			index := textureIds[fileKeys[i]]
 			oldMapTextures[index] = render.NewMapTexture(0, 0, 0)
 			continue
-
-			// log.Fatal("Error loading texture in main:", err)
-			// return nil
 		}
 
 		// the index is not necessarily in order
@@ -98,13 +96,13 @@ func main() {
 		panic(fmt.Errorf("Could not initialize glfw: %v", err))
 	}
 	defer glfw.Terminate()
-	windowHandler = NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
+	windowHandler = client.NewWindowHandler(windowWidth, windowHeight, "Quake 2 BSP Loader")
 
 	renderer := render.NewRenderer()
 	renderer.Init()
 
 	// Load files
-	mapData, oldMapTextures, err := initMesh("./data/pak0.pak", "maps/demo1.bsp")
+	mapData, mapTextures, err := initMesh("./data/pak0.pak", "maps/demo1.bsp")
 	if err != nil {
 		fmt.Println("Error initializing mesh: ", err)
 		return
@@ -119,8 +117,8 @@ func main() {
 
 	var renderMap render.RenderMap
 
-	for !windowHandler.shouldClose() {
-		windowHandler.startFrame()
+	for !windowHandler.ShouldClose() {
+		windowHandler.StartFrame()
 		renderer.PrepareFrame(camera.GetViewMatrix(), camera.GetPerspectiveMatrix())
 
 		// Render map data to the screen
@@ -130,11 +128,11 @@ func main() {
 		// Update the polygons if the player is in a different leaf
 		if prevLeaf != curLeaf {
 			if len(leaf.Faces) > 0 {
-				renderMap = render.CreateRenderingData(mapData, oldMapTextures, leaf.Faces)
+				renderMap = render.CreateRenderingData(mapData, mapTextures, leaf.Faces)
 			}
 			prevLeaf = curLeaf
 		}
-		render.DrawMap(renderMap, renderer.Shader.ProgramShader, renderer.Vao, renderer.Vbo)
+		render.DrawMap(renderer, renderMap)
 
 		camera.UpdateViewMatrix()
 	}

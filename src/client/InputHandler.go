@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -41,7 +41,7 @@ func NewInputHandler() *InputHandler {
 	}
 }
 
-func (handler *InputHandler) isActive(a Action) bool {
+func (handler *InputHandler) IsActive(a Action) bool {
 	return handler.keysPressed[handler.actionToKeyMap[a]]
 }
 
@@ -56,7 +56,7 @@ func (handler *InputHandler) keyCallback(window *glfw.Window, key glfw.Key, scan
 	}
 }
 
-func (handler *InputHandler) getCursorChange() mgl64.Vec2 {
+func (handler *InputHandler) GetCursorChange() mgl64.Vec2 {
 	return handler.cursorChange
 }
 

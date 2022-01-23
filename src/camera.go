@@ -1,8 +1,10 @@
 package main
 
 import (
-	"github.com/go-gl/mathgl/mgl32"
 	"math"
+
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/samuelyuan/go-quake2/client"
 )
 
 const (
@@ -13,10 +15,10 @@ type Camera struct {
 	xAngle         float32
 	zAngle         float32
 	cameraPosition mgl32.Vec3
-	windowHandler  *WindowHandler
+	windowHandler  *client.WindowHandler
 }
 
-func NewCamera(windowHandler *WindowHandler) *Camera {
+func NewCamera(windowHandler *client.WindowHandler) *Camera {
 	return &Camera{
 		xAngle:         float32(0),
 		zAngle:         float32(3),
@@ -40,15 +42,15 @@ func (c *Camera) GetPerspectiveMatrix() mgl32.Mat4 {
 
 func (c *Camera) UpdateViewMatrix() {
 	// Move the camera around using WASD keys
-	speed := float32(200 * c.windowHandler.getTimeSinceLastFrame())
+	speed := float32(200 * c.windowHandler.GetTimeSinceLastFrame())
 	dir := []float32{0, 0, 0}
-	if c.windowHandler.inputHandler.isActive(PLAYER_FORWARD) {
+	if c.windowHandler.InputHandler.IsActive(client.PLAYER_FORWARD) {
 		dir[2] += speed
-	} else if c.windowHandler.inputHandler.isActive(PLAYER_BACKWARD) {
+	} else if c.windowHandler.InputHandler.IsActive(client.PLAYER_BACKWARD) {
 		dir[2] -= speed
-	} else if c.windowHandler.inputHandler.isActive(PLAYER_LEFT) {
+	} else if c.windowHandler.InputHandler.IsActive(client.PLAYER_LEFT) {
 		dir[0] += speed
-	} else if c.windowHandler.inputHandler.isActive(PLAYER_RIGHT) {
+	} else if c.windowHandler.InputHandler.IsActive(client.PLAYER_RIGHT) {
 		dir[0] -= speed
 	}
 
@@ -60,7 +62,7 @@ func (c *Camera) UpdateViewMatrix() {
 
 	c.cameraPosition = c.cameraPosition.Add(mgl32.Vec3{movementDelta.X(), movementDelta.Y(), movementDelta.Z()})
 
-	offset := c.windowHandler.inputHandler.getCursorChange()
+	offset := c.windowHandler.InputHandler.GetCursorChange()
 	xOffset := float32(offset[0] * MouseSensitivity)
 	yOffset := float32(offset[1] * MouseSensitivity)
 

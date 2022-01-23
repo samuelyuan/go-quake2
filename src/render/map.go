@@ -17,12 +17,11 @@ type RenderMap struct {
 }
 
 func CreateRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, faceIds []int) RenderMap {
-	vertsByTexture := make(map[int][]Surface)
+	surfacesByTexture := make(map[int][]Surface)
 
 	// lightmap is shared by all polygons
 	lightmap := NewLightmap()
 
-	allSurfaces := make([]Surface, 0)
 	for _, faceId := range faceIds {
 		faceInfo := mapData.Faces[faceId]
 		texInfo := mapData.TexInfos[faceInfo.TextureInfo]
@@ -33,13 +32,14 @@ func CreateRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 		}
 
 		// Get index in texture array
-		filename := getTextureFilename(texInfo)
+		filename := convertByteArrayToString(texInfo.TextureName)
 		texId := mapData.TextureIds[filename]
 		mapTexture := mapTextures[texId]
 
-		_, ok := vertsByTexture[texId]
+		// Check if there are any surfaces mapped to this texture
+		_, ok := surfacesByTexture[texId]
 		if !ok {
-			vertsByTexture[texId] = make([]Surface, 0)
+			surfacesByTexture[texId] = make([]Surface, 0)
 		}
 
 		faceVertices := getAllFaceVertices(mapData, faceInfo)
@@ -47,13 +47,12 @@ func CreateRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 		surface.UpdateLightmap(lightmap, faceVertices, texInfo, faceInfo.LightmapOffset, mapData)
 
 		// Add all triangle data for this texture
-		vertsByTexture[texId] = append(vertsByTexture[texId], *surface)
-		allSurfaces = append(allSurfaces, *surface)
+		surfacesByTexture[texId] = append(surfacesByTexture[texId], *surface)
 	}
 
 	lightmap.GenerateMipmaps()
 
-	polygonBuffer := NewPolygonBuffer(vertsByTexture, mapTextures)
+	polygonBuffer := NewPolygonBuffer(surfacesByTexture, mapTextures)
 	renderMap := RenderMap{
 		MapLightmap:  lightmap,
 		MapTextures:  polygonBuffer.MapTextures,
@@ -62,9 +61,10 @@ func CreateRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 	return renderMap
 }
 
-func DrawMap(renderMap RenderMap, programShader uint32, vao uint32, vbo uint32) {
-	gl.BindVertexArray(vao)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+func DrawMap(renderer *Renderer, renderMap RenderMap) {
+	programShader := renderer.Shader.ProgramShader
+	gl.BindVertexArray(renderer.Vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, renderer.Vbo)
 
 	vertices := renderMap.VertexBuffer
 
@@ -151,15 +151,15 @@ func getEdgeVertex(mapData *q2file.MapData, faceEdgeIdx int) q2file.Vertex {
 	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
 }
 
-func getTextureFilename(texInfo q2file.TexInfo) string {
+func convertByteArrayToString(byteArray [32]byte) string {
 	// convert filename byte array to string
 	filename := ""
-	for i := 0; i < len(texInfo.TextureName); i++ {
+	for i := 0; i < len(byteArray); i++ {
 		// end of string
-		if texInfo.TextureName[i] == 0 {
+		if byteArray[i] == 0 {
 			break
 		}
-		filename += string(texInfo.TextureName[i])
+		filename += string(byteArray[i])
 	}
 	return filename
 }
