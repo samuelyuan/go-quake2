@@ -146,7 +146,7 @@ func AllocateLightmapRect(node *LightmapNode, width int32, height int32) *Lightm
 	var nodes []LightmapNode
 	if (node.Width - width) > (node.Height - height) {
 		nodes = []LightmapNode{
-			LightmapNode{
+			{
 				X:      node.X,
 				Y:      node.Y,
 				Width:  width,
@@ -154,7 +154,7 @@ func AllocateLightmapRect(node *LightmapNode, width int32, height int32) *Lightm
 				Nodes:  []LightmapNode{},
 				Filled: false,
 			},
-			LightmapNode{
+			{
 				X:      node.X + width,
 				Y:      node.Y,
 				Width:  node.Width - width,
@@ -165,7 +165,7 @@ func AllocateLightmapRect(node *LightmapNode, width int32, height int32) *Lightm
 		}
 	} else {
 		nodes = []LightmapNode{
-			LightmapNode{
+			{
 				X:      node.X,
 				Y:      node.Y,
 				Width:  node.Width,
@@ -173,7 +173,7 @@ func AllocateLightmapRect(node *LightmapNode, width int32, height int32) *Lightm
 				Nodes:  []LightmapNode{},
 				Filled: false,
 			},
-			LightmapNode{
+			{
 				X:      node.X,
 				Y:      node.Y + height,
 				Width:  node.Width,

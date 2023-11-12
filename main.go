@@ -31,7 +31,7 @@ func createTextureList(
 ) []render.MapTexture {
 	// get sorted strings
 	var fileKeys []string
-	for texFilename, _ := range textureIds {
+	for texFilename := range textureIds {
 		fileKeys = append(fileKeys, texFilename)
 	}
 	sort.Strings(fileKeys)

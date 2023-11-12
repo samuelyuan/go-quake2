@@ -137,7 +137,7 @@ func getUniqueFacesFromVisibleFaces(visibleFaces []int) map[int]bool {
 
 func getFaceIdsFromUniqueFaces(uniqueFaces map[int]bool) []int {
 	clusterFaces := make([]int, 0)
-	for faceId, _ := range uniqueFaces {
+	for faceId := range uniqueFaces {
 		clusterFaces = append(clusterFaces, faceId)
 	}
 	return clusterFaces
@@ -154,7 +154,7 @@ func getFaceIdsFromFaces(faces []int) []int {
 func getTreeLeaves(mapData *q2file.MapData, allLeaves []TreeLeaf, facesFromCluster map[ClusterId][]int, allFaceIds []int) []TreeLeaf {
 	newLeafFaces := make([]TreeLeaf, len(allLeaves))
 	bspLeaves := mapData.BSPLeaves
-	for i, _ := range allLeaves {
+	for i := range allLeaves {
 		c := ClusterId(bspLeaves[i].Cluster)
 		if c != clusterInvalidId {
 			newLeafFaces[i] = TreeLeaf{

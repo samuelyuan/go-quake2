@@ -18,7 +18,7 @@ type PolygonBuffer struct {
 func NewPolygonBuffer(surfacesByTexture map[int][]Surface, mapTextures []MapTexture) *PolygonBuffer {
 	// only get the textures that were used in the map
 	var texKeys []int
-	for k, _ := range surfacesByTexture {
+	for k := range surfacesByTexture {
 		texKeys = append(texKeys, k)
 	}
 	sort.Ints(texKeys)
