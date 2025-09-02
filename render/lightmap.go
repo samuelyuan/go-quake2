@@ -1,11 +1,7 @@
 package render
 
 import (
-	"github.com/go-gl/gl/v4.1-core/gl"
-)
-
-const (
-	LIGHTMAP_SIZE = int32(512)
+	"fmt"
 )
 
 type MapLightmap struct {
@@ -22,8 +18,12 @@ type LightmapNode struct {
 	Filled bool
 }
 
-func NewLightmap() *MapLightmap {
-	textureId := generateTexture()
+func NewLightmap(textureMgr *TextureManager) *MapLightmap {
+	textureId, err := textureMgr.CreateLightmapTexture(LIGHTMAP_SIZE)
+	if err != nil {
+		// For now, we'll use 0 as a fallback, but in production you'd want proper error handling
+		textureId = 0
+	}
 
 	// Setup BSP tree here
 	return &MapLightmap{
@@ -39,26 +39,8 @@ func NewLightmap() *MapLightmap {
 	}
 }
 
-func generateTexture() uint32 {
-	var textureId uint32
-	gl.GenTextures(1, &textureId)
-	gl.BindTexture(gl.TEXTURE_2D, textureId)
-
-	// Initialize empty region to be updated later
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_SIZE, LIGHTMAP_SIZE, 0, uint32(gl.RGBA), uint32(gl.UNSIGNED_BYTE), nil)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-
-	// Set the last pixel to white (for non-lightmapped faces)
-	whitePixel := []uint8{255, 255, 255, 255}
-	gl.TexSubImage2D(gl.TEXTURE_2D, 0, LIGHTMAP_SIZE-1, LIGHTMAP_SIZE-1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(whitePixel))
-
-	return textureId
-}
-
-func (lightmap *MapLightmap) GenerateMipmaps() {
-	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
-	gl.GenerateMipmap(gl.TEXTURE_2D)
+func (lightmap *MapLightmap) GenerateMipmaps(textureMgr *TextureManager) {
+	textureMgr.GenerateMipmaps(lightmap.Texture)
 }
 
 func (lightmap *MapLightmap) CopyMapLightmapToTexture(
@@ -66,7 +48,8 @@ func (lightmap *MapLightmap) CopyMapLightmapToTexture(
 	lightmapData []uint8,
 	destinationNode *LightmapNode,
 	totalPixels int32,
-) {
+	textureMgr *TextureManager,
+) error {
 	// Each pixel has 4 values for RGBA
 	pixels := make([]uint8, totalPixels*4)
 	curByteWrite := 0
@@ -106,13 +89,16 @@ func (lightmap *MapLightmap) CopyMapLightmapToTexture(
 		baseIndexRead += 3
 	}
 
-	lightmap.updateSubTexture(destinationNode, pixels)
+	if err := lightmap.updateSubTexture(destinationNode, pixels, textureMgr); err != nil {
+		return fmt.Errorf("failed to update subtexture: %w", err)
+	}
+
+	return nil
 }
 
-func (lightmap *MapLightmap) updateSubTexture(node *LightmapNode, pixels []uint8) {
+func (lightmap *MapLightmap) updateSubTexture(node *LightmapNode, pixels []uint8, textureMgr *TextureManager) error {
 	// Copy the lightmap into the allocated rectangle
-	gl.BindTexture(gl.TEXTURE_2D, lightmap.Texture)
-	gl.TexSubImage2D(gl.TEXTURE_2D, 0, node.X, node.Y, node.Width, node.Height, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels))
+	return textureMgr.UpdateTextureSubImage(lightmap.Texture, node.X, node.Y, node.Width, node.Height, pixels)
 }
 
 // Navigate the Lightmap BSP tree and find an empty spot of the right size

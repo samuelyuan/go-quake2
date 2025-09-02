@@ -3,7 +3,6 @@ package render
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -16,20 +15,49 @@ type Shader struct {
 	ProgramShader  uint32
 }
 
-func NewShader(vertexFilePath string, fragmentFilePath string) *Shader {
+func NewShader(vertexFilePath string, fragmentFilePath string) (*Shader, error) {
 	sh := Shader{}
 
 	// compile shaders
-	sh.VertexShader = sh.initVertexShader(vertexFilePath)
-	sh.FragmentShader = sh.initFragmentShader(fragmentFilePath)
+	vertexShader, err := sh.initVertexShader(vertexFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile vertex shader: %w", err)
+	}
+	sh.VertexShader = vertexShader
+
+	fragmentShader, err := sh.initFragmentShader(fragmentFilePath)
+	if err != nil {
+		// Clean up vertex shader if fragment shader fails
+		gl.DeleteShader(vertexShader)
+		return nil, fmt.Errorf("failed to compile fragment shader: %w", err)
+	}
+	sh.FragmentShader = fragmentShader
 
 	programShader := gl.CreateProgram()
 	gl.AttachShader(programShader, sh.VertexShader)
 	gl.AttachShader(programShader, sh.FragmentShader)
 	gl.LinkProgram(programShader)
-	sh.ProgramShader = programShader
 
-	return &sh
+	// Check if program linking succeeded
+	var status int32
+	gl.GetProgramiv(programShader, gl.LINK_STATUS, &status)
+	if status == gl.FALSE {
+		var logLength int32
+		gl.GetProgramiv(programShader, gl.INFO_LOG_LENGTH, &logLength)
+
+		log := strings.Repeat("\x00", int(logLength+1))
+		gl.GetProgramInfoLog(programShader, logLength, nil, gl.Str(log))
+
+		// Clean up shaders
+		gl.DeleteShader(vertexShader)
+		gl.DeleteShader(fragmentShader)
+		gl.DeleteProgram(programShader)
+
+		return nil, fmt.Errorf("failed to link shader program: %v", log)
+	}
+
+	sh.ProgramShader = programShader
+	return &sh, nil
 }
 
 func (sh *Shader) compileShader(source string, shaderType uint32) (uint32, error) {
@@ -55,28 +83,36 @@ func (sh *Shader) compileShader(source string, shaderType uint32) (uint32, error
 	return shader, nil
 }
 
-func (sh *Shader) initVertexShader(filePath string) uint32 {
-	vertexShader, err := sh.compileShader(sh.readShaderCode(filePath), gl.VERTEX_SHADER)
+func (sh *Shader) initVertexShader(filePath string) (uint32, error) {
+	shaderCode, err := sh.readShaderCode(filePath)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
-	return vertexShader
+	vertexShader, err := sh.compileShader(shaderCode, gl.VERTEX_SHADER)
+	if err != nil {
+		return 0, err
+	}
+	return vertexShader, nil
 }
 
-func (sh *Shader) initFragmentShader(filePath string) uint32 {
-	fragmentShader, err := sh.compileShader(sh.readShaderCode(filePath), gl.FRAGMENT_SHADER)
+func (sh *Shader) initFragmentShader(filePath string) (uint32, error) {
+	shaderCode, err := sh.readShaderCode(filePath)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
-	return fragmentShader
+	fragmentShader, err := sh.compileShader(shaderCode, gl.FRAGMENT_SHADER)
+	if err != nil {
+		return 0, err
+	}
+	return fragmentShader, nil
 }
 
 // Read shader code from file
-func (sh *Shader) readShaderCode(filePath string) string {
+func (sh *Shader) readShaderCode(filePath string) (string, error) {
 	code := ""
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("failed to open shader file %s: %w", filePath, err)
 	}
 	defer f.Close()
 
@@ -85,8 +121,24 @@ func (sh *Shader) readShaderCode(filePath string) string {
 		code += "\n" + scanner.Text()
 	}
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("failed to read shader file %s: %w", filePath, err)
 	}
 	code += "\x00"
-	return code
+	return code, nil
+}
+
+// Cleanup frees OpenGL shader resources
+func (sh *Shader) Cleanup() {
+	if sh.ProgramShader != 0 {
+		gl.DeleteProgram(sh.ProgramShader)
+		sh.ProgramShader = 0
+	}
+	if sh.VertexShader != 0 {
+		gl.DeleteShader(sh.VertexShader)
+		sh.VertexShader = 0
+	}
+	if sh.FragmentShader != 0 {
+		gl.DeleteShader(sh.FragmentShader)
+		sh.FragmentShader = 0
+	}
 }

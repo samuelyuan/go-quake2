@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/samuelyuan/go-quake2/render"
+	"github.com/samuelyuan/go-quake2/q2file"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 		return
 	}
 
-	imageData, walData, err := render.LoadQ2WAL(texFile)
+	imageData, walData, err := q2file.LoadQ2WAL(texFile)
 	if err != nil {
 		log.Fatal("Error loading texture in main:", err)
 		return

@@ -3,56 +3,88 @@ package render
 import (
 	"fmt"
 
-	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
 )
 
 type Renderer struct {
-	Vao    uint32
-	Vbo    uint32
-	Shader *Shader
+	glState    *GLStateManager
+	buffers    *BufferManager
+	textureMgr *TextureManager
+	shader     *Shader
+	uniforms   *UniformManager
+	skybox     *Skybox
 }
 
 func NewRenderer() *Renderer {
-	return &Renderer{}
+	return &Renderer{
+		glState:    NewGLStateManager(),
+		buffers:    NewBufferManager(),
+		textureMgr: NewTextureManager(),
+		shader:     nil, // Will be set in Init()
+		uniforms:   nil, // Will be set in Init()
+	}
 }
 
-func (r *Renderer) Init() {
-	if err := gl.Init(); err != nil {
-		panic(err)
+func (r *Renderer) Init() error {
+	// Initialize OpenGL state
+	if err := r.glState.Init(); err != nil {
+		return fmt.Errorf("failed to initialize OpenGL state: %w", err)
 	}
 
-	version := gl.GoStr(gl.GetString(gl.VERSION))
-	fmt.Println("OpenGL version", version)
+	// Create shader
+	shader, err := NewShader("shaders/goquake2.vert", "shaders/goquake2.frag")
+	if err != nil {
+		return fmt.Errorf("failed to create shader: %w", err)
+	}
+	r.shader = shader
 
-	r.Shader = NewShader("render/goquake2.vert", "render/goquake2.frag")
+	// Create uniform manager
+	r.uniforms = NewUniformManager(r.shader.ProgramShader)
 
-	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
-	gl.Enable(gl.DEPTH_TEST)
+	// Initialize buffers
+	r.buffers.Init()
 
-	// Set appropriate blending mode
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-	gl.Enable(gl.CULL_FACE)
-	gl.CullFace(gl.FRONT)
-
-	// Create buffers/arrays
-	gl.GenVertexArrays(1, &r.Vao)
-	gl.GenBuffers(1, &r.Vbo)
+	return nil
 }
 
 func (r *Renderer) PrepareFrame(viewMatrix mgl32.Mat4, projectionMatrix mgl32.Mat4) {
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	// Clear buffers
+	r.glState.ClearBuffers()
 
-	programShader := r.Shader.ProgramShader
+	// Use shader program
+	r.uniforms.UseProgram()
 
-	gl.UseProgram(programShader)
+	// Set camera matrices
+	r.uniforms.SetViewMatrix(viewMatrix)
+	r.uniforms.SetProjectionMatrix(projectionMatrix)
+}
 
-	// Pass the camera matrices to the shader
-	viewLoc := gl.GetUniformLocation(programShader, gl.Str("view\x00"))
-	gl.UniformMatrix4fv(viewLoc, 1, false, &viewMatrix[0])
+// GetTextureManager returns the texture manager
+func (r *Renderer) GetTextureManager() *TextureManager {
+	return r.textureMgr
+}
 
-	projectionLoc := gl.GetUniformLocation(programShader, gl.Str("projection\x00"))
-	gl.UniformMatrix4fv(projectionLoc, 1, false, &projectionMatrix[0])
+// SetSkybox sets the skybox for this renderer
+func (r *Renderer) SetSkybox(skybox *Skybox) {
+	r.skybox = skybox
+}
+
+// DrawSkybox draws the skybox if one is set
+func (r *Renderer) DrawSkybox(viewMatrix, projectionMatrix mgl32.Mat4) {
+	if r.skybox != nil {
+		r.skybox.Draw(viewMatrix, projectionMatrix)
+	}
+}
+
+// Cleanup frees all OpenGL resources
+func (r *Renderer) Cleanup() {
+	if r.buffers != nil {
+		r.buffers.Cleanup()
+	}
+	if r.textureMgr != nil {
+		r.textureMgr.Cleanup()
+	}
+	if r.shader != nil {
+		r.shader.Cleanup()
+	}
 }

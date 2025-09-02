@@ -11,6 +11,7 @@ Quake 2 Map Renderer written in Go and OpenGL.
 * Free roam around the environment
 * Renders only a small sector of the map depending on player location
 * Supports static lightmapping
+* Simple FPS counter in console
 
 ### Installation
 
@@ -23,3 +24,4 @@ Quake 2 Map Renderer written in Go and OpenGL.
 - W/S to move forward/backward.
 - A/D to move left/right.
 - Use mouse to look around
+- Escape to quit

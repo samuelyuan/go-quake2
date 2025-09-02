@@ -75,14 +75,10 @@ func LoadQ2WALFromPAK(pakReader io.ReaderAt, pakFileMap map[string]PakFile, text
 }
 
 func byteToString(byteArr []byte) string {
-	newString := ""
-	for i := 0; i < len(byteArr); i++ {
-		character := byteArr[i]
-		// end of string
-		if character == 0 {
-			break
+	for i, b := range byteArr {
+		if b == 0 {
+			return string(byteArr[:i])
 		}
-		newString += string(character)
 	}
-	return newString
+	return string(byteArr)
 }

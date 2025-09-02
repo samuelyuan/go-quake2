@@ -71,6 +71,7 @@ func (surface *Surface) UpdateLightmap(
 	texInfo q2file.TexInfo,
 	faceLightmapOffset uint32,
 	mapData *q2file.MapData,
+	textureMgr *TextureManager,
 ) {
 	// Check if face has a lightmap
 	if texInfo.Flags == 0 {
@@ -86,7 +87,7 @@ func (surface *Surface) UpdateLightmap(
 		}
 
 		totalPixels := lightmapDimensions.Width * lightmapDimensions.Height
-		lightmap.CopyMapLightmapToTexture(faceLightmapOffset, mapData.LightmapData, lightmapRect, totalPixels)
+		lightmap.CopyMapLightmapToTexture(faceLightmapOffset, mapData.LightmapData, lightmapRect, totalPixels, textureMgr)
 
 		// Update lightmap texture coordinates for rendering
 		for i := 0; i < len(surface.TexturedVertices); i++ {
