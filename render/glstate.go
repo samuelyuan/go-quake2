@@ -55,8 +55,3 @@ func (gsm *GLStateManager) setupDefaultState() {
 func (gsm *GLStateManager) ClearBuffers() {
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 }
-
-// IsInitialized returns whether OpenGL has been initialized
-func (gsm *GLStateManager) IsInitialized() bool {
-	return gsm.initialized
-}

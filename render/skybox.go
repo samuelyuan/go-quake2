@@ -16,8 +16,7 @@ func NewSkybox(textureID uint32) *Skybox {
 }
 
 // Draw renders the skybox (just clears to dark burnt orange/red)
-func (s *Skybox) Draw(viewMatrix, projectionMatrix interface{}) {
-	// Parameters kept for future compatibility but not used
+func (s *Skybox) Draw() {
 	gl.ClearColor(0.3, 0.1, 0.05, 1.0) // Dark burnt orange/red - authentic Quake 2
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 }

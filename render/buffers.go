@@ -59,13 +59,3 @@ func (bm *BufferManager) Cleanup() {
 	gl.DeleteVertexArrays(1, &bm.vao)
 	gl.DeleteBuffers(1, &bm.vbo)
 }
-
-// GetVAO returns the VAO ID (for backward compatibility)
-func (bm *BufferManager) GetVAO() uint32 {
-	return bm.vao
-}
-
-// GetVBO returns the VBO ID (for backward compatibility)
-func (bm *BufferManager) GetVBO() uint32 {
-	return bm.vbo
-}

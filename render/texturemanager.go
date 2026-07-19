@@ -91,17 +91,6 @@ func (tm *TextureManager) CreateWALTexture(imageData []uint8, walData q2file.Wal
 	return textureId, nil
 }
 
-// BindTexture binds a texture for use
-func (tm *TextureManager) BindTexture(textureId uint32) {
-	gl.BindTexture(gl.TEXTURE_2D, textureId)
-}
-
-// BindTextureToUnit binds a texture to a specific texture unit
-func (tm *TextureManager) BindTextureToUnit(textureUnit uint32, textureId uint32) {
-	gl.ActiveTexture(textureUnit)
-	gl.BindTexture(gl.TEXTURE_2D, textureId)
-}
-
 // UpdateTextureSubImage updates a portion of a texture
 func (tm *TextureManager) UpdateTextureSubImage(textureId uint32, x, y, width, height int32, data []uint8) error {
 	// Input validation
@@ -144,11 +133,6 @@ func (tm *TextureManager) Cleanup() {
 		tm.DeleteTexture(textureId)
 	}
 	tm.textures = make(map[string]uint32)
-}
-
-// GetTextureCount returns the number of managed textures
-func (tm *TextureManager) GetTextureCount() int {
-	return len(tm.textures)
 }
 
 // getFormatChannels returns the number of color channels for a given format

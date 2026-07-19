@@ -123,13 +123,13 @@ func (g *Game) update() error {
 	g.windowHandler.StartFrame()
 
 	// Draw skybox background FIRST (simple clear to sky blue)
-	g.renderer.DrawSkybox(g.camera.GetViewMatrix(), g.camera.GetPerspectiveMatrix())
+	g.renderer.DrawSkybox()
 
 	g.renderer.PrepareFrame(g.camera.GetViewMatrix(), g.camera.GetPerspectiveMatrix())
 
 	// Update camera and find current leaf
 	g.camera.UpdateViewMatrix()
-	leaf := g.bspTree.findLeafNode(0, g.mapData, g.camera.GetCameraPosition())
+	leaf := g.bspTree.FindLeafNode(0, g.mapData, g.camera.GetCameraPosition())
 	g.curLeaf = leaf.LeafIndex
 
 	// Update rendering data if leaf changed

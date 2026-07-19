@@ -48,7 +48,7 @@ func LoadQ2PAK(r io.ReaderAt) (map[string]PakFile, error) {
 			return nil, err
 		}
 
-		filename := byteToString(pakFile.Filename[:])
+		filename := BytesToString(pakFile.Filename[:])
 		pakFileMap[filename] = pakFile
 	}
 	return pakFileMap, nil
@@ -74,7 +74,9 @@ func LoadQ2WALFromPAK(pakReader io.ReaderAt, pakFileMap map[string]PakFile, text
 	return LoadQ2WAL(walReader)
 }
 
-func byteToString(byteArr []byte) string {
+// BytesToString converts a fixed-size, null-terminated byte array (as used
+// throughout the Quake 2 file formats) into a Go string.
+func BytesToString(byteArr []byte) string {
 	for i, b := range byteArr {
 		if b == 0 {
 			return string(byteArr[:i])

@@ -124,13 +124,3 @@ func (c *Camera) GetCameraPosition() [3]float32 {
 	position := c.cameraPosition
 	return [3]float32{-position.X(), -position.Y(), -position.Z()}
 }
-
-// SetPosition sets the camera to a specific position
-func (c *Camera) SetPosition(x, y, z float32) {
-	c.cameraPosition = mgl32.Vec3{x, y, z}
-}
-
-// GetPosition returns the camera's position as a Vec3
-func (c *Camera) GetPosition() mgl32.Vec3 {
-	return c.cameraPosition
-}

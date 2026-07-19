@@ -209,8 +209,3 @@ func (tree *BSPTree) FindLeafNode(startNode int, mapData *q2file.MapData, positi
 	// Convert negative node ID to leaf index
 	return tree.TreeLeaves[-(nodeID + 1)]
 }
-
-// findLeafNode is an alias for FindLeafNode (maintains compatibility)
-func (tree *BSPTree) findLeafNode(startNode int, mapData *q2file.MapData, position [3]float32) TreeLeaf {
-	return tree.FindLeafNode(startNode, mapData, position)
-}

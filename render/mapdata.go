@@ -31,7 +31,7 @@ func CreateRenderingData(mapData *q2file.MapData, mapTextures []MapTexture, face
 		}
 
 		// Get index in texture array
-		filename := convertByteArrayToString(texInfo.TextureName)
+		filename := q2file.BytesToString(texInfo.TextureName[:])
 		texId := mapData.TextureIds[filename]
 		mapTexture := mapTextures[texId]
 
@@ -96,15 +96,4 @@ func getEdgeVertex(mapData *q2file.MapData, faceEdgeIdx int) q2file.Vertex {
 	// Edge index is negative
 	// Return second vertex as the start of the edge
 	return mapData.Vertices[mapData.Edges[-edgeIdx].V2]
-}
-
-// convertByteArrayToString converts a byte array to a string, stopping at null terminator
-// Optimized version: no string concatenation, single allocation
-func convertByteArrayToString(byteArray [32]byte) string {
-	for i, b := range byteArray {
-		if b == 0 {
-			return string(byteArray[:i])
-		}
-	}
-	return string(byteArray[:])
 }

@@ -70,9 +70,9 @@ func (r *Renderer) SetSkybox(skybox *Skybox) {
 }
 
 // DrawSkybox draws the skybox if one is set
-func (r *Renderer) DrawSkybox(viewMatrix, projectionMatrix mgl32.Mat4) {
+func (r *Renderer) DrawSkybox() {
 	if r.skybox != nil {
-		r.skybox.Draw(viewMatrix, projectionMatrix)
+		r.skybox.Draw()
 	}
 }
 
